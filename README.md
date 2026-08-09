@@ -53,3 +53,29 @@ python manage.py runserver
 - `DEBUG=false`, 긴 무작위 `DJANGO_SECRET_KEY`, 정확한 `ALLOWED_HOSTS`와 `CORS_ALLOWED_ORIGINS`를 설정한다.
 - HTTPS, 정적 파일 수집(`collectstatic`), DB migration, 관리자 계정, 에러 모니터링을 릴리스 절차에 포함한다.
 - Docker는 `docker compose up --build`로 시작할 수 있다. 프로덕션에서는 서비스 시작 시 매번 migration하는 대신 CI/CD 배포 단계에서 한 번만 실행한다.
+
+
+## 구현 된 부분 
+
+
+| 영역 | 구현된 기능 | 상태 |
+|---|---|---|
+| `accounts` | 회원가입, JWT 로그인/토큰 재발급, 프로필 조회·수정 | 구현됨 |
+| `accounts` | 온보딩 완료 여부, 선호 카테고리, 마케팅 동의, 프로필 이미지 필드 | 구현됨 |
+| `accounts` | 알림 모델·알림 목록·읽음 처리 API | 구현됨 |
+| `catalog` | 제품 등록·목록·상세·수정·삭제 | 구현됨 |
+| `catalog` | 디지털 클로젯용 제품 정보, 브랜드, 카테고리, 구매일, 패스포트 코드 | 구현됨 |
+| `catalog` | 제품 이미지·영수증 업로드 구조 | 구현됨 |
+| `catalog` | 케어 가이드 북마크 | 구현됨 |
+| `care` | 진단 사진 업로드·진단 이력 저장 | 구현됨 |
+| `care` | 케어 가이드 조회 | 구현됨 |
+| `care` | 매장 조회 | 구현됨 |
+| `care` | 방문 예약·예약 번호 생성·예약 목록 | 구현됨 |
+| `care` | AS 접수·상태 저장·접수 목록 | 구현됨 |
+| `community` | 게시글 등록·목록·상세·수정·삭제 | 구현됨 |
+| `community` | 댓글 작성·목록·삭제 | 구현됨 |
+| `community` | 게시글 좋아요 구조·좋아요 수 조회 | 구현됨 |
+| `ai` | AI 채팅방 생성, 메시지 저장, 이전 채팅 조회 | 구현됨 |
+| `ai` | API 키가 있을 때 LLM 호출, 키가 없을 때 데모 응답 | 구현됨 |
+| 공통 | JWT 인증, 본인 제품/진단/예약/AS 이력만 조회하도록 기본 분리 | 구현됨 |
+| 공통 | Dockerfile, docker-compose 기본 골격 | 구현됨 |
