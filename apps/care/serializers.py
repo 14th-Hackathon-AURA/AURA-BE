@@ -5,7 +5,11 @@ class DiagnosisSerializer(serializers.ModelSerializer):
     class Meta:
         model = Diagnosis
         fields = "__all__"
-        read_only_fields = ("requested_by", "status", "result", "created_at")
+        read_only_fields = (
+            "requested_by", "status", "result", "condition_level",
+            "damage_type", "damage_description", "care_suggestion",
+            "damage_location", "created_at",
+        )
     def validate_product(self, product):
         if product.user != self.context["request"].user:
             raise serializers.ValidationError("본인의 제품만 선택할 수 있습니다.")

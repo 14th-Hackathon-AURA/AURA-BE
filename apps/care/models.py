@@ -7,11 +7,21 @@ class Diagnosis(models.Model):
         PENDING = "PENDING", "분석 대기"
         DONE = "DONE", "분석 완료"
         FAILED = "FAILED", "분석 실패"
+
+    class ConditionLevel(models.TextChoices):
+        SAFE = "SAFE", "양호"
+        CAUTION = "CAUTION", "관리 필요"
+        DANGER = "DANGER", "점검 권장"
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="diagnoses")
     requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     image = models.ImageField(upload_to="diagnoses/")
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
     result = models.JSONField(default=dict, blank=True) # 손상부위·심각도·근거
+    condition_level = models.CharField(max_length=10, choices=ConditionLevel.choices, blank=True)
+    damage_type = models.CharField(max_length=80, blank=True)
+    damage_description = models.TextField(blank=True)
+    care_suggestion = models.TextField(blank=True)
+    damage_location = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
 class CareGuide(models.Model):
@@ -19,6 +29,9 @@ class CareGuide(models.Model):
     material = models.CharField(max_length=60)
     category = models.CharField(max_length=50, blank=True)
     content = models.TextField()
+    source_name = models.CharField(max_length=120, blank=True)
+    source_url = models.URLField(blank=True)
+    season = models.CharField(max_length=30, blank=True)
     image = models.ImageField(upload_to="guides/", null=True, blank=True)
     is_published = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

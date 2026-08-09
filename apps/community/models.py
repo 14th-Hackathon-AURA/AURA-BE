@@ -5,6 +5,7 @@ class Post(models.Model):
     title = models.CharField(max_length=150)
     body = models.TextField()
     image = models.ImageField(upload_to="community/", null=True, blank=True)
+    tagged_products = models.ManyToManyField("catalog.Product", blank=True, related_name="community_posts")
     created_at = models.DateTimeField(auto_now_add=True)
 class Comment(models.Model):
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name="comments")
