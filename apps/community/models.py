@@ -7,6 +7,17 @@ class Post(models.Model):
     image = models.ImageField(upload_to="community/", null=True, blank=True)
     tagged_products = models.ManyToManyField("catalog.Product", blank=True, related_name="community_posts")
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class PostImage(models.Model):
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name="images")
+    image = models.ImageField(upload_to="community/")
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("order", "created_at")
+
 class Comment(models.Model):
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name="comments")
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)

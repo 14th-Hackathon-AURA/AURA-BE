@@ -1,17 +1,15 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from .models import Notification, Profile
+from .models import Notification, Profile, calculate_membership_tier
 
 class RegisterSerializer(serializers.ModelSerializer):
-    username = serializers.CharField(required=False, allow_blank=True)
     password = serializers.CharField(write_only=True, min_length=8)
     class Meta:
         model = User
-        fields = ("username", "email", "password")
+        fields = ("email", "password")
     def create(self, data):
-        if not data.get("username"):
-            data["username"] = data["email"]
+        data["username"] = data["email"]
         user = User.objects.create_user(**data)
         Profile.objects.create(user=user)
         return user
@@ -25,25 +23,25 @@ class RegisterSerializer(serializers.ModelSerializer):
         return email
 
 
-class EmailOrUsernameTokenSerializer(TokenObtainPairSerializer):
-    username = serializers.CharField(required=False, write_only=True)
-    email = serializers.EmailField(required=False, write_only=True)
+class EmailTokenSerializer(TokenObtainPairSerializer):
+    email = serializers.EmailField(required=True, write_only=True)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields[self.username_field].required = False
 
     def validate(self, attrs):
-        identifier = attrs.get("email") or attrs.get(self.username_field)
-        if not identifier:
-            raise serializers.ValidationError("이메일 또는 사용자 이름을 입력해주세요.")
-        if identifier and "@" in identifier:
-            user = User.objects.filter(email__iexact=identifier).first()
-            attrs[self.username_field] = user.username if user else identifier
+        email = attrs["email"]
+        user = User.objects.filter(email__iexact=email).first()
+        attrs[self.username_field] = user.username if user else email
         return super().validate(attrs)
 
 class ProfileSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(source="user.email", read_only=True)
+    membership_tier = serializers.SerializerMethodField()
+
+    def get_membership_tier(self, obj):
+        return calculate_membership_tier(obj.user)
 
     class Meta:
         model = Profile
@@ -52,9 +50,8 @@ class ProfileSerializer(serializers.ModelSerializer):
             "preferred_categories", "lifestyle", "preferred_brands",
             "min_budget", "max_budget", "marketing_agreed",
             "onboarding_completed", "image", "membership_tier",
-            "membership_points",
         )
-        read_only_fields = ("email", "membership_tier", "membership_points")
+        read_only_fields = ("email", "membership_tier")
 
     def validate(self, attrs):
         minimum = attrs.get("min_budget", getattr(self.instance, "min_budget", None))
@@ -69,8 +66,7 @@ class ProfileSerializer(serializers.ModelSerializer):
         )
         if completing:
             required = (
-                "nickname", "gender", "age_range", "preferred_categories",
-                "lifestyle", "min_budget", "max_budget",
+                "nickname", "gender", "age_range", "lifestyle",
             )
             missing = [
                 field for field in required

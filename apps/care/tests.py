@@ -41,3 +41,28 @@ class DiagnosisApiTests(APITestCase):
 
     def test_invalid_year_is_validation_error(self):
         self.assertEqual(self.client.get("/api/diagnoses/", {"year": "bad"}).status_code, 400)
+
+    def test_owner_can_update_and_delete_diagnosis(self):
+        diagnosis = Diagnosis.objects.create(
+            product=self.product,
+            requested_by=self.user,
+            image=SimpleUploadedFile("before.gif", self.image_bytes, content_type="image/gif"),
+        )
+        replacement = SimpleUploadedFile("after.gif", self.image_bytes, content_type="image/gif")
+        response = self.client.patch(
+            f"/api/diagnoses/{diagnosis.id}/", {"image": replacement}, format="multipart"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.client.delete(f"/api/diagnoses/{diagnosis.id}/").status_code, 204)
+
+    def test_other_user_cannot_update_or_delete_diagnosis(self):
+        diagnosis = Diagnosis.objects.create(
+            product=self.other_product,
+            requested_by=self.other,
+            image=SimpleUploadedFile("other.gif", self.image_bytes, content_type="image/gif"),
+        )
+        self.assertEqual(
+            self.client.patch(f"/api/diagnoses/{diagnosis.id}/", {"product": self.product.id}).status_code,
+            404,
+        )
+        self.assertEqual(self.client.delete(f"/api/diagnoses/{diagnosis.id}/").status_code, 404)

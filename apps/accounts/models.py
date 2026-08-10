@@ -1,6 +1,18 @@
 from django.conf import settings
 from django.db import models
 
+
+def calculate_membership_tier(user):
+    post_count = user.post_set.count()
+    comment_count = user.comment_set.count()
+    if post_count >= 200 and comment_count >= 200:
+        return "AURA Diamond"
+    if post_count >= 100 and comment_count >= 100:
+        return "AURA Platinum"
+    if post_count >= 50 and comment_count >= 50:
+        return "AURA Gold"
+    return "AURA Silver"
+
 class Profile(models.Model):
     class Gender(models.TextChoices):
         FEMALE = "FEMALE", "여성"
@@ -20,8 +32,6 @@ class Profile(models.Model):
     marketing_agreed = models.BooleanField(default=False)
     onboarding_completed = models.BooleanField(default=False)
     image = models.ImageField(upload_to="profiles/", null=True, blank=True)
-    membership_tier = models.CharField(max_length=30, default="AURA Silver")
-    membership_points = models.PositiveIntegerField(default=0)
 
 class Notification(models.Model):
     class Type(models.TextChoices):

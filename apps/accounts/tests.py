@@ -25,10 +25,7 @@ class AccountApiTests(APITestCase):
                 "nickname": "아기사자",
                 "gender": "FEMALE",
                 "age_range": "20대 중후반",
-                "preferred_categories": ["핸드백", "액세서리"],
                 "lifestyle": ["직장", "여행"],
-                "min_budget": 1000000,
-                "max_budget": 3000000,
                 "onboarding_completed": True,
             },
             format="json",
@@ -36,6 +33,7 @@ class AccountApiTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["email"], "aura@example.com")
         self.assertEqual(response.data["membership_tier"], "AURA Silver")
+        self.assertNotIn("membership_points", response.data)
 
     def test_budget_range_validation(self):
         user = User.objects.create_user("user", password="strong-pass-123")

@@ -1,10 +1,40 @@
 from rest_framework import serializers
 from apps.catalog.models import Product
-from .models import Comment, Post, PostLike
+from apps.accounts.models import calculate_membership_tier
+from .models import Comment, Post, PostImage, PostLike
+
+
+class PostImageSerializer(serializers.ModelSerializer):
+    post = serializers.PrimaryKeyRelatedField(queryset=Post.objects.all(), write_only=True)
+
+    class Meta:
+        model = PostImage
+        fields = ("id", "post", "image", "order", "created_at")
+        read_only_fields = ("id", "created_at")
+
+    def validate_post(self, post):
+        if post.author_id != self.context["request"].user.id:
+            raise serializers.ValidationError("본인 게시글에만 이미지를 추가할 수 있습니다.")
+        return post
+
+
 class CommentSerializer(serializers.ModelSerializer):
+    author_nickname = serializers.SerializerMethodField()
+    author_membership_tier = serializers.SerializerMethodField()
+
+    def get_author_nickname(self, obj):
+        profile = getattr(obj.author, "profile", None)
+        return profile.nickname if profile and profile.nickname else obj.author.username
+
+    def get_author_membership_tier(self, obj):
+        return calculate_membership_tier(obj.author)
+
     class Meta:
         model = Comment
-        fields = ("id", "post", "author", "body", "created_at")
+        fields = (
+            "id", "post", "author", "author_nickname",
+            "author_membership_tier", "body", "created_at",
+        )
         read_only_fields = ("author", "created_at")
     def validate_post(self, post):
         if self.instance and self.instance.post_id != post.id:
@@ -13,12 +43,22 @@ class CommentSerializer(serializers.ModelSerializer):
 
 class PostSerializer(serializers.ModelSerializer):
     comments = CommentSerializer(many=True, read_only=True)
+    images = PostImageSerializer(many=True, read_only=True)
     like_count = serializers.IntegerField(source="likes.count", read_only=True)
     liked_by_me = serializers.SerializerMethodField()
+    author_nickname = serializers.SerializerMethodField()
+    author_membership_tier = serializers.SerializerMethodField()
     tagged_products = serializers.PrimaryKeyRelatedField(
         many=True, queryset=Product.objects.all(), required=False
     )
     tagged_product_cards = serializers.SerializerMethodField()
+
+    def get_author_nickname(self, obj):
+        profile = getattr(obj.author, "profile", None)
+        return profile.nickname if profile and profile.nickname else obj.author.username
+
+    def get_author_membership_tier(self, obj):
+        return calculate_membership_tier(obj.author)
 
     def get_liked_by_me(self, obj):
         request = self.context.get("request")
@@ -41,9 +81,12 @@ class PostSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "author",
+            "author_nickname",
+            "author_membership_tier",
             "title",
             "body",
             "image",
+            "images",
             "created_at",
             "comments",
             "like_count",

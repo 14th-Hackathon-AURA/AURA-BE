@@ -20,7 +20,6 @@ from .serializers import (
 
 class DiagnosisViewSet(viewsets.ModelViewSet):
     serializer_class = DiagnosisSerializer
-    http_method_names = ("get", "post", "head", "options")
 
     def get_queryset(self):
         queryset = Diagnosis.objects.filter(
