@@ -1,10 +1,15 @@
 from rest_framework import generics, permissions, viewsets
+from rest_framework_simplejwt.views import TokenObtainPairView
 from .models import Notification, Profile
-from .serializers import NotificationSerializer, RegisterSerializer, ProfileSerializer
+from .serializers import EmailTokenSerializer, NotificationSerializer, RegisterSerializer, ProfileSerializer
 
 class RegisterView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
     serializer_class = RegisterSerializer
+
+class EmailTokenView(TokenObtainPairView):
+    permission_classes = [permissions.AllowAny]
+    serializer_class = EmailTokenSerializer
 
 class ProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = ProfileSerializer

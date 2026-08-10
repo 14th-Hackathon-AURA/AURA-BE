@@ -2,7 +2,10 @@ import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "change-this-in-production")
+SECRET_KEY = os.getenv(
+    "DJANGO_SECRET_KEY",
+    "development-only-change-this-secret-key-before-production",
+)
 DEBUG = os.getenv("DEBUG", "true").lower() == "true"
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 

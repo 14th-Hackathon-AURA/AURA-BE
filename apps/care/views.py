@@ -22,9 +22,20 @@ class DiagnosisViewSet(viewsets.ModelViewSet):
     serializer_class = DiagnosisSerializer
 
     def get_queryset(self):
-        return Diagnosis.objects.filter(
+        queryset = Diagnosis.objects.filter(
             requested_by=self.request.user
         ).order_by("-created_at")
+        product_id = self.request.query_params.get("product")
+        year = self.request.query_params.get("year")
+        if product_id:
+            queryset = queryset.filter(product_id=product_id)
+        if year:
+            try:
+                queryset = queryset.filter(created_at__year=int(year))
+            except (TypeError, ValueError):
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError({"year": "연도는 숫자로 입력해야 합니다."})
+        return queryset
 
     def perform_create(self, serializer):
         serializer.save(requested_by=self.request.user)
@@ -35,9 +46,19 @@ class CareGuideViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return CareGuide.objects.filter(
+        queryset = CareGuide.objects.filter(
             is_published=True
         ).order_by("-created_at")
+        material = self.request.query_params.get("material")
+        category = self.request.query_params.get("category")
+        season = self.request.query_params.get("season")
+        if material:
+            queryset = queryset.filter(material__iexact=material)
+        if category:
+            queryset = queryset.filter(category__iexact=category)
+        if season:
+            queryset = queryset.filter(season__iexact=season)
+        return queryset
 
 
 class StoreViewSet(viewsets.ReadOnlyModelViewSet):
