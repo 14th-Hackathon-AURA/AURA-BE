@@ -4,6 +4,115 @@
 
 와이어프레임의 회원·AI 챗·방문 준비·디지털 클로젯·제품 등록/상세·케어 가이드/진단/이력/결과·AS/매장·커뮤니티 흐름을 기준으로 만든 Django REST API 골격이다.
 
+## 확정 API 명세 요약
+
+모든 `/api/` 요청은 별도 표기가 없으면 JWT 인증이 필요하다.
+
+```http
+Authorization: Bearer <access_token>
+```
+
+| Method | Endpoint | 설명 |
+|---|---|---|
+| POST | `/api/auth/register/` | 이메일·비밀번호 회원가입 |
+| POST | `/api/auth/token/` | 이메일·비밀번호 JWT 로그인 |
+| POST | `/api/auth/token/refresh/` | access token 갱신 |
+| GET/PATCH | `/api/me/` | 내 프로필·온보딩·멤버십 등급 |
+| GET/PATCH | `/api/notifications/` | 내 알림 목록·읽음 처리 |
+| CRUD | `/api/products/` | 내 디지털 클로젯 상품 |
+| CRUD | `/api/product-images/` | 제품·영수증·보증서 이미지 |
+| GET | `/api/care-guides/` | 소재·카테고리·계절별 케어 가이드 |
+| CRUD | `/api/care-bookmarks/` | 케어 가이드 북마크 |
+| CRUD | `/api/diagnoses/` | 진단 생성·이력·상세·수정·삭제 |
+| CRUD | `/api/posts/` | 커뮤니티 게시글·상품 태그 |
+| CRUD | `/api/post-images/` | 커뮤니티 게시글 다중 이미지 |
+| CRUD | `/api/comments/` | 댓글 |
+| GET/POST/DELETE | `/api/post-likes/` | 좋아요·좋아요 취소 |
+
+### 회원가입과 로그인
+
+사용자가 입력하는 로그인 정보는 이메일과 비밀번호뿐이다. 닉네임은 로그인 ID가 아니며 온보딩 이후 커뮤니티 표시 이름으로 사용한다.
+
+```json
+// POST /api/auth/register/
+{
+  "email": "user@example.com",
+  "password": "minimum-8-characters"
+}
+```
+
+```json
+// POST /api/auth/token/
+{
+  "email": "user@example.com",
+  "password": "minimum-8-characters"
+}
+```
+
+### 온보딩과 프로필
+
+- 필수: `nickname`, `gender`, `age_range`, `lifestyle`
+- 선택: `preferred_categories`, `preferred_brands`, `min_budget`, `max_budget`
+- `onboarding_completed=true`로 저장하려면 필수값이 모두 있어야 한다.
+- 온보딩 이후에도 `PATCH /api/me/`로 수정할 수 있다.
+
+### 커뮤니티 멤버십
+
+포인트와 실제 결제 기능은 구현하지 않는다. 게시글 수와 댓글 수 조건을 **각각 모두 충족**하면 등급이 자동으로 올라간다.
+
+| 등급 | 게시글 수 | 댓글 수 |
+|---|---:|---:|
+| AURA Silver | 기본 | 기본 |
+| AURA Gold | 50 이상 | 50 이상 |
+| AURA Platinum | 100 이상 | 100 이상 |
+| AURA Diamond | 200 이상 | 200 이상 |
+
+게시글과 댓글 응답에는 작성자의 `author_nickname`, `author_membership_tier`가 포함된다.
+
+### 알림
+
+- `type`: `CARE`, `MEMBERSHIP`, `EVENT`, `GENERAL`
+- `action_url`: 알림을 선택했을 때 이동할 앱 결과 화면 경로
+- `PATCH /api/notifications/{id}/`에 `{"is_read": true}`를 보내 읽음 처리한다.
+
+### 상품과 디지털 패스포트
+
+- 상품에는 구매일·구매처·구매 채널·메모를 저장할 수 있다.
+- `passport_code`는 서버가 자동 생성한다.
+- 이미지 `kind`는 `PRODUCT`, `RECEIPT`, `WARRANTY` 중 하나다.
+- 상품 상세 응답에는 `diagnosis_history`가 포함된다.
+- 영수증·보증서 저장은 지원하지만 실제 OCR 추출은 이 백엔드 범위가 아니다.
+
+### 진단
+
+```http
+GET /api/diagnoses/?product=3&year=2026
+```
+
+- 본인 상품으로만 진단을 만들 수 있다.
+- 본인 진단만 조회·수정·삭제할 수 있다.
+- 사용자는 입력 이미지와 연결 상품을 수정할 수 있다.
+- `status`, `condition_level`, `damage_type`, `result` 등 AI/CV 결과 필드는 읽기 전용이다.
+- 실제 CV 판독과 `PENDING → DONE` 자동 전환은 구현 범위가 아니다.
+
+### 커뮤니티
+
+- 본인 클로젯 상품만 게시글에 태그할 수 있다.
+- 게시글 수정·삭제는 작성자만 가능하다.
+- 댓글 수정·삭제는 작성자만 가능하다.
+- 같은 게시글에 중복 좋아요할 수 없다.
+- 여러 이미지는 `/api/post-images/`에 `post`, `image`, `order`를 `multipart/form-data`로 전송해 등록한다.
+
+상세 요청·응답 필드와 오류·권한 규칙은 [`API_SPEC.md`](API_SPEC.md)를 참고한다.
+
+### 이번 작업 제외 범위
+
+- 실제 AI/RAG 답변 품질
+- 실제 CV 손상 판독
+- 실제 OCR 추출
+- AS·방문 예약·공식 센터 기능 보완
+- 실제 멤버십 결제
+
 ## 공평한 역할 분담
 
 | 담당 | 도메인과 화면 | 핵심 API / 책임 |
