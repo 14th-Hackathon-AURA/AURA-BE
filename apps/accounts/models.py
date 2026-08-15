@@ -3,8 +3,12 @@ from django.db import models
 
 
 def calculate_membership_tier(user):
-    post_count = user.post_set.count()
-    comment_count = user.comment_set.count()
+    return calculate_membership_tier_from_counts(
+        user.post_set.count(), user.comment_set.count()
+    )
+
+
+def calculate_membership_tier_from_counts(post_count, comment_count):
     if post_count >= 200 and comment_count >= 200:
         return "AURA Diamond"
     if post_count >= 100 and comment_count >= 100:
@@ -45,8 +49,16 @@ class Notification(models.Model):
     title = models.CharField(max_length=100)
     body = models.TextField()
     action_url = models.CharField(max_length=255, blank=True)
+    event_key = models.CharField(max_length=120, null=True, blank=True)
     is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ("-created_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("user", "event_key"),
+                condition=models.Q(event_key__isnull=False) & ~models.Q(event_key=""),
+                name="unique_notification_event_per_user",
+            )
+        ]

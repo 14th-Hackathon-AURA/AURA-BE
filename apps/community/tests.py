@@ -28,6 +28,11 @@ class CommunityApiTests(APITestCase):
         )
         self.assertEqual(response.status_code, 201)
         post_id = response.data["id"]
+        self.assertEqual(
+            response.data["tagged_product_cards"],
+            [{"id": self.product.id, "name": "Bag", "brand": ""}],
+        )
+        self.assertNotIn("image", response.data["tagged_product_cards"][0])
 
         self.client.force_authenticate(self.reader)
         response = self.client.post(

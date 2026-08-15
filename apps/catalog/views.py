@@ -5,7 +5,9 @@ from .serializers import CareBookmarkSerializer, ProductImageSerializer, Product
 class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
     def get_queryset(self):
-        return Product.objects.filter(user=self.request.user).prefetch_related("images", "diagnoses").order_by("-created_at")
+        return Product.objects.filter(user=self.request.user).prefetch_related(
+            "images", "diagnoses", "service_requests"
+        ).order_by("-created_at")
     def perform_create(self, serializer): serializer.save(user=self.request.user)
 
 class ProductImageViewSet(viewsets.ModelViewSet):

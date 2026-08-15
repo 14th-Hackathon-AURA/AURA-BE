@@ -40,3 +40,24 @@ class ServiceRequestSerializer(serializers.ModelSerializer):
         if product.user != self.context["request"].user:
             raise serializers.ValidationError("본인의 제품만 선택할 수 있습니다.")
         return product
+
+    def validate(self, attrs):
+        request = self.context["request"]
+        reservation = attrs.get(
+            "reservation", getattr(self.instance, "reservation", None)
+        )
+        product = attrs.get("product", getattr(self.instance, "product", None))
+        store = attrs.get("store", getattr(self.instance, "store", None))
+        if reservation and reservation.user_id != request.user.id:
+            raise serializers.ValidationError(
+                {"reservation": "본인의 방문 예약만 연결할 수 있습니다."}
+            )
+        if reservation and reservation.product_id and reservation.product_id != product.id:
+            raise serializers.ValidationError(
+                {"reservation": "방문 예약과 AS 요청의 제품이 일치해야 합니다."}
+            )
+        if reservation and store and reservation.store_id != store.id:
+            raise serializers.ValidationError(
+                {"store": "방문 예약과 AS 요청의 매장이 일치해야 합니다."}
+            )
+        return attrs

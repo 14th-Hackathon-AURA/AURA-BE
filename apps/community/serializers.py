@@ -66,7 +66,7 @@ class PostSerializer(serializers.ModelSerializer):
 
     def get_tagged_product_cards(self, obj):
         return [
-            {"id": product.id, "name": product.name, "brand": product.brand, "image": product.image.url if product.image else None}
+            {"id": product.id, "name": product.name, "brand": product.brand}
             for product in obj.tagged_products.all()
         ]
 

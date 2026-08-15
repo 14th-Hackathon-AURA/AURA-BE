@@ -52,12 +52,15 @@ class CareGuideViewSet(viewsets.ReadOnlyModelViewSet):
         material = self.request.query_params.get("material")
         category = self.request.query_params.get("category")
         season = self.request.query_params.get("season")
+        guide_type = self.request.query_params.get("guide_type")
         if material:
             queryset = queryset.filter(material__iexact=material)
         if category:
             queryset = queryset.filter(category__iexact=category)
         if season:
             queryset = queryset.filter(season__iexact=season)
+        if guide_type:
+            queryset = queryset.filter(guide_type__iexact=guide_type)
         return queryset
 
 
