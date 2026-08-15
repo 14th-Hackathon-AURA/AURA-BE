@@ -9,9 +9,9 @@ class Diagnosis(models.Model):
         FAILED = "FAILED", "분석 실패"
 
     class ConditionLevel(models.TextChoices):
-        SAFE = "SAFE", "양호"
-        CAUTION = "CAUTION", "관리 필요"
-        DANGER = "DANGER", "점검 권장"
+        SAFE = "SAFE", "안전"
+        CAUTION = "CAUTION", "주의"
+        DANGER = "DANGER", "위험"
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="diagnoses")
     requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     image = models.ImageField(upload_to="diagnoses/")
@@ -25,7 +25,15 @@ class Diagnosis(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
 class CareGuide(models.Model):
+    class GuideType(models.TextChoices):
+        BASIC = "BASIC", "기본 관리"
+        POST_PURCHASE = "POST_PURCHASE", "구매 직후 관리"
+        AFTER_CARE = "AFTER_CARE", "사후 케어"
+
     title = models.CharField(max_length=120)
+    guide_type = models.CharField(
+        max_length=20, choices=GuideType.choices, default=GuideType.BASIC
+    )
     material = models.CharField(max_length=60)
     category = models.CharField(max_length=50, blank=True)
     content = models.TextField()
@@ -55,6 +63,8 @@ class VisitReservation(models.Model):
     product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True)
     visit_at = models.DateTimeField()
     purpose = models.CharField(max_length=100)
+    contact_name = models.CharField(max_length=50, blank=True)
+    contact_phone = models.CharField(max_length=20, blank=True)
     request_note = models.TextField(blank=True)
     reservation_code = models.CharField(max_length=16, unique=True)
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.RESERVED)
@@ -67,7 +77,9 @@ class ServiceRequest(models.Model):
         COMPLETED = "COMPLETED", "Completed"
         CANCELLED = "CANCELLED", "Cancelled"
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="service_requests")
-    product = models.ForeignKey(Product, on_delete=models.PROTECT)
+    product = models.ForeignKey(
+        Product, on_delete=models.PROTECT, related_name="service_requests"
+    )
     store = models.ForeignKey(Store, on_delete=models.PROTECT, null=True, blank=True)
     reservation = models.OneToOneField(VisitReservation, on_delete=models.SET_NULL, null=True, blank=True)
     symptom = models.TextField()

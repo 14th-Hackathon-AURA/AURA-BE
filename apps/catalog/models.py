@@ -7,13 +7,20 @@ def generate_passport_code():
     return f"AURA-{uuid.uuid4().hex[:16].upper()}"
 
 class Product(models.Model):
+    class PurchaseChannel(models.TextChoices):
+        ONLINE = "ONLINE", "온라인"
+        OFFLINE = "OFFLINE", "오프라인"
+
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="products")
     name = models.CharField(max_length=120)
     brand = models.CharField(max_length=80, blank=True)
     category = models.CharField(max_length=50)
     purchased_at = models.DateField(null=True, blank=True)
     purchase_place = models.CharField(max_length=120, blank=True)
-    purchase_channel = models.CharField(max_length=30, blank=True)
+    purchase_channel = models.CharField(
+        max_length=10, choices=PurchaseChannel.choices, blank=True
+    )
+    purchase_price = models.PositiveIntegerField(null=True, blank=True)
     memo = models.TextField(blank=True)
     image = models.ImageField(upload_to="products/", null=True, blank=True)
     passport_code = models.CharField(max_length=64, unique=True, default=generate_passport_code, editable=False)

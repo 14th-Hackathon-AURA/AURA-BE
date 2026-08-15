@@ -1,8 +1,6 @@
 # AURA Backend API Specification
 
-기준 브랜치: `backend_soyun`
-
-모든 `/api/` 요청은 별도 표기가 없으면 JWT 인증이 필요하다.
+모든 `/api/` 요청은 별도 표기가 없으면 JWT 인증이 필요합니다.
 
 ```http
 Authorization: Bearer <access_token>
@@ -10,135 +8,115 @@ Authorization: Bearer <access_token>
 
 ## 인증
 
-### 회원가입
+- `POST /api/auth/register/` — `email`, `password`
+- `POST /api/auth/token/` — `email`, `password`
+- `POST /api/auth/token/refresh/` — `refresh`
 
-`POST /api/auth/register/`
+로그인 ID는 이메일입니다. 닉네임은 온보딩 이후 표시 이름으로 사용하며 로그인 ID가 아닙니다.
 
-```json
-{
-  "email": "user@example.com",
-  "password": "minimum-8-characters"
-}
-```
+## 프로필과 온보딩
 
-- 로그인 ID는 이메일이다.
-- Django 내부 `username`에는 이메일을 동일하게 저장하지만 외부 API 입력으로 받지 않는다.
-- 닉네임은 로그인 ID가 아니며 온보딩에서 설정한다.
+- `GET /api/me/`
+- `PATCH /api/me/`
 
-### 로그인
+필수 온보딩 값:
 
-`POST /api/auth/token/`
+- `nickname`
+- `gender`
+- `age_range`
+- `lifestyle`
 
-```json
-{
-  "email": "user@example.com",
-  "password": "minimum-8-characters"
-}
-```
+선택값:
 
-응답: `access`, `refresh`
+- `preferred_categories`
+- `preferred_brands`
+- `min_budget`, `max_budget`
+- `phone`, `image`, `marketing_agreed`
 
-### 토큰 갱신
-
-`POST /api/auth/token/refresh/`
-
-## 프로필 및 온보딩
-
-`GET /api/me/`
-
-`PATCH /api/me/`
-
-주요 필드:
-
-- 필수 온보딩 값: `nickname`, `gender`, `age_range`, `lifestyle`
-- 선택값: `preferred_categories`, `preferred_brands`, `min_budget`, `max_budget`
-- 기타: `phone`, `image`, `marketing_agreed`, `onboarding_completed`
-- 읽기 전용: `email`, `membership_tier`
-
-`onboarding_completed=true`로 저장하려면 필수 온보딩 값이 모두 있어야 한다. 모든 값은 이후 `PATCH /api/me/`로 수정할 수 있다.
-
-## 멤버십
-
-포인트와 결제 기능은 없다. 등급은 작성한 게시글 수와 댓글 수를 각각 계산해 자동 산정한다.
-
-| 등급 | 게시글 수 | 댓글 수 |
-|---|---:|---:|
-| AURA Silver | 기본 | 기본 |
-| AURA Gold | 50 이상 | 50 이상 |
-| AURA Platinum | 100 이상 | 100 이상 |
-| AURA Diamond | 200 이상 | 200 이상 |
-
-두 조건을 모두 충족해야 해당 등급이 된다.
+`onboarding_completed=true`로 변경하려면 필수값이 모두 있어야 합니다. `membership_tier`는 읽기 전용이며 게시글·댓글 수로 계산합니다.
 
 ## 알림
 
-- 목록: `GET /api/notifications/`
-- 상세: `GET /api/notifications/{id}/`
-- 읽음 처리: `PATCH /api/notifications/{id}/` with `{"is_read": true}`
+- `GET /api/notifications/`
+- `GET /api/notifications/{id}/`
+- `PATCH /api/notifications/{id}/` — `{"is_read": true}`
 
-필드:
+필드: `type`, `title`, `body`, `action_url`, `is_read`, `created_at`
 
-- `type`: `CARE`, `MEMBERSHIP`, `EVENT`, `GENERAL`
-- `title`, `body`
-- `action_url`: 알림 클릭 후 이동할 앱 결과 화면 경로
-- `is_read`, `created_at`
+알림 종류는 `CARE`, `MEMBERSHIP`, `EVENT`, `GENERAL`입니다. 본인의 알림만 조회·수정할 수 있습니다.
 
-본인의 알림만 조회·수정할 수 있다.
+자동 생성 사건:
+
+- 진단 완료·실패
+- 방문 예약 생성·상태 변경
+- 멤버십 등급 상승
 
 ## 디지털 클로젯
 
 - CRUD: `/api/products/`
 - 이미지 CRUD: `/api/product-images/`
 
-상품 주요 필드:
+상품 필드:
 
 - `name`, `brand`, `category`
-- `purchased_at`, `purchase_place`, `purchase_channel`, `memo`
+- `purchased_at`, `purchase_place`
+- `purchase_channel`: `ONLINE` 또는 `OFFLINE`
+- `purchase_price`, `memo`
 - `image`, `metadata`
-- 읽기 전용 `passport_code`, `diagnosis_history`
+- 읽기 전용: `passport_code`, `diagnosis_history`, `service_history`
 
-`passport_code`는 서버가 자동 생성한다.
-
-상품 이미지 `kind`:
+이미지 `kind`:
 
 - `PRODUCT`
 - `RECEIPT`
 - `WARRANTY`
 
-OCR 추출은 이 API의 범위가 아니다.
+수동 등록과 이미지 저장은 지원하지만 OCR 추출은 별도 작업입니다. 다른 사용자의 제품 또는 제품 이미지에는 접근할 수 없습니다.
 
-## 진단
+## 케어 가이드
 
-- 생성/목록: `POST/GET /api/diagnoses/`
-- 상세/수정/삭제: `GET/PATCH/DELETE /api/diagnoses/{id}/`
+- `GET /api/care-guides/`
+- `GET /api/care-guides/{id}/`
+- 북마크: `GET/POST/DELETE /api/care-bookmarks/`
 
-생성 요청은 `multipart/form-data`로 `product`, `image`를 전송한다.
+필터:
 
-사용자는 본인 상품의 진단만 생성하고 본인 진단만 조회·수정·삭제할 수 있다. 사용자가 수정할 수 있는 값은 입력 이미지와 연결 상품이며, AI/CV 결과 필드는 읽기 전용이다.
+```http
+GET /api/care-guides/?guide_type=POST_PURCHASE&material=가죽&category=bag&season=여름
+```
 
-목록 필터:
+`guide_type`:
+
+- `BASIC` — 기본 관리
+- `POST_PURCHASE` — 구매 직후 관리
+- `AFTER_CARE` — 사후 케어
+
+게시되지 않았거나 존재하지 않는 가이드는 북마크할 수 없습니다.
+
+## 진단 데이터
+
+- `POST/GET /api/diagnoses/`
+- `GET/PATCH/DELETE /api/diagnoses/{id}/`
+
+생성은 `multipart/form-data`로 `product`, `image`를 전송합니다. 본인 상품의 진단만 생성하고 본인 기록만 조회·수정·삭제할 수 있습니다.
+
+필터:
 
 ```http
 GET /api/diagnoses/?product=3&year=2026
 ```
 
-결과 저장 필드:
+결과 단계는 `SAFE`, `CAUTION`, `DANGER`이며 화면 표기는 안전·주의·위험입니다. 실제 이미지 판독과 상태 자동 변경은 별도 CV 작업입니다.
 
-- `status`: `PENDING`, `DONE`, `FAILED`
-- `condition_level`: `SAFE`, `CAUTION`, `DANGER`
-- `damage_type`, `damage_description`, `care_suggestion`
-- `damage_location`, `result`
+## 공식 케어·방문 데모 흐름
 
-실제 CV 판독과 자동 상태 전환은 범위 밖이다.
+- 매장 조회: `GET /api/stores/`, `GET /api/stores/{id}/`
+- 방문 예약: CRUD `/api/visit-reservations/`
+- 서비스 요청: CRUD `/api/service-requests/`
 
-## 케어 가이드
+방문 예약은 `store`, 선택 `product`, `visit_at`, `purpose`, `contact_name`, `contact_phone`, `request_note`를 저장합니다. 서비스 요청은 본인 상품과 본인 방문 예약만 연결할 수 있습니다.
 
-- 목록/상세: `GET /api/care-guides/`, `GET /api/care-guides/{id}/`
-- 북마크: `/api/care-bookmarks/`
-
-필터: `material`, `category`, `season`
-
-공식 출처는 `source_name`, `source_url`로 제공한다.
+이는 AURA 내부 데모 흐름이며 실제 브랜드 AS 시스템과 직접 연동하지 않습니다.
 
 ## 커뮤니티
 
@@ -146,37 +124,39 @@ GET /api/diagnoses/?product=3&year=2026
 
 CRUD: `/api/posts/`
 
-응답에는 다음 정보가 포함된다.
+응답에는 작성자 닉네임·멤버십 등급, 다중 이미지, 댓글, 좋아요 수, 내 좋아요 여부와 상품 태그가 포함됩니다.
 
-- `author_nickname`
-- `author_membership_tier`
-- `tagged_products`, `tagged_product_cards`
-- `images`
-- `comments`, `like_count`, `liked_by_me`
+상품 태그 입력은 `tagged_products`에 본인 상품 ID 목록을 전송합니다. 표시용 `tagged_product_cards`는 다음 형태입니다.
 
-본인이 소유한 클로젯 상품만 게시글에 태그할 수 있다. 게시글 수정·삭제는 작성자만 가능하다.
+```json
+[
+  {
+    "id": 3,
+    "name": "모노그램 숄더백",
+    "brand": "MCM"
+  }
+]
+```
 
-### 다중 이미지
+내부 관계 식별을 위한 `id` 외 표시 정보는 제품 이름과 브랜드만 제공합니다.
+
+### 게시글 이미지
 
 CRUD: `/api/post-images/`
 
-각 이미지를 `multipart/form-data`로 `post`, `image`, `order`와 함께 등록한다. 한 게시글에 여러 번 호출해 여러 이미지를 추가할 수 있다.
+`multipart/form-data`로 `post`, `image`, `order`를 전송합니다. 본인 게시글에만 이미지를 추가·수정·삭제할 수 있습니다.
 
-### 댓글
+### 댓글과 좋아요
 
-CRUD: `/api/comments/`
+- 댓글 CRUD: `/api/comments/`
+- 좋아요 목록·생성·삭제: `/api/post-likes/`
 
-생성 시 `post`, `body`를 전송한다. 댓글 응답에도 작성자 닉네임과 멤버십 등급이 포함된다. 수정·삭제는 작성자만 가능하다.
+게시글과 댓글은 작성자만 수정·삭제할 수 있고 한 사용자는 같은 게시글에 중복 좋아요할 수 없습니다.
 
-### 좋아요
+## 현재 별도 작업
 
-- 생성/목록/삭제: `/api/post-likes/`
-- 같은 사용자는 같은 게시글에 중복 좋아요를 할 수 없다.
-
-## 이번 범위에서 제외
-
-- 실제 AI/RAG 답변 품질
-- 실제 CV 손상 판독과 자동 완료 처리
-- 실제 OCR 추출
-- AS·방문 예약·공식 센터 기능 보완
+- 영수증·보증서 OCR 추출
+- AI 챗봇 추천·RAG·방문 준비 카드
+- 실제 CV 손상 판독
+- 외부 브랜드 AS 연동
 - 실제 멤버십 결제

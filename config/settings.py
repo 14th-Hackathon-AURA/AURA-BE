@@ -31,6 +31,15 @@ STATIC_URL, MEDIA_URL = "/static/", "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+FRONTEND_DIAGNOSIS_PATH_TEMPLATE = os.getenv(
+    "FRONTEND_DIAGNOSIS_PATH_TEMPLATE", "/care/diagnoses/{id}"
+)
+FRONTEND_VISIT_PATH_TEMPLATE = os.getenv(
+    "FRONTEND_VISIT_PATH_TEMPLATE", "/my/visit-reservations/{id}"
+)
+FRONTEND_MEMBERSHIP_PATH = os.getenv(
+    "FRONTEND_MEMBERSHIP_PATH", "/my/membership"
+)
 REST_FRAMEWORK = {"DEFAULT_AUTHENTICATION_CLASSES": ("rest_framework_simplejwt.authentication.JWTAuthentication",),
                   "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",)}
 
