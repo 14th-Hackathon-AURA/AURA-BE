@@ -31,4 +31,9 @@ urlpatterns = [
     path("api/auth/token/", EmailTokenView.as_view()), path("api/auth/token/refresh/", TokenRefreshView.as_view()),
     path("api/me/", ProfileView.as_view()), path("api/ai/chat/", ChatView.as_view()),
     path("api/ai/care-recommendations/", CareRecommendationView.as_view()), path("api/", include(router.urls)),
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+]
+if settings.DEBUG:
+    urlpatterns += static(
+        settings.MEDIA_URL,
+        document_root=settings.MEDIA_ROOT,
+    )
