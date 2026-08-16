@@ -5,4 +5,6 @@ django-cors-headers>=4.4
 Pillow>=10.4
 gunicorn>=23.0
 psycopg[binary]>=3.2
-openai>=1.40
+openai>=1.68
+python-dotenv>=1.0
+azure-ai-documentintelligence>=1.0

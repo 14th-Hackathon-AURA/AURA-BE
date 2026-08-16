@@ -1,3 +1,8 @@
 from django.contrib import admin
 
-# Register your models here.
+from .models import ChatMessage, ChatSession, VisitCard
+
+
+admin.site.register(ChatSession)
+admin.site.register(ChatMessage)
+admin.site.register(VisitCard)
