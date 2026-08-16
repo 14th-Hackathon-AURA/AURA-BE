@@ -1,11 +1,6 @@
 import os
 import re
 
-from azure.ai.documentintelligence import DocumentIntelligenceClient
-from azure.ai.documentintelligence.models import AnalyzeDocumentRequest
-from azure.core.credentials import AzureKeyCredential
-
-
 KNOWN_BRANDS = [
     "MCM",
     "LOUIS VUITTON",
@@ -21,6 +16,14 @@ KNOWN_BRANDS = [
 
 
 def get_document_client():
+    try:
+        from azure.ai.documentintelligence import DocumentIntelligenceClient
+        from azure.core.credentials import AzureKeyCredential
+    except ImportError as exc:
+        raise RuntimeError(
+            "azure-ai-documentintelligence 패키지가 설치되지 않았습니다."
+        ) from exc
+
     endpoint = os.getenv("AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT")
     key = os.getenv("AZURE_DOCUMENT_INTELLIGENCE_KEY")
 
@@ -76,6 +79,8 @@ def extract_receipt_information(file_bytes):
     영수증용 Azure 사전 학습 모델.
     별도 AI 학습 없이 prebuilt-receipt를 사용합니다.
     """
+    from azure.ai.documentintelligence.models import AnalyzeDocumentRequest
+
     client = get_document_client()
 
     poller = client.begin_analyze_document(
@@ -129,6 +134,8 @@ def extract_warranty_information(file_bytes):
     보증서는 양식이 제각각이라 prebuilt-layout으로 텍스트를 읽습니다.
     확실히 찾지 못한 항목은 None으로 반환해 사용자가 직접 입력합니다.
     """
+    from azure.ai.documentintelligence.models import AnalyzeDocumentRequest
+
     client = get_document_client()
 
     poller = client.begin_analyze_document(

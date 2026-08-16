@@ -2,7 +2,7 @@ from django.shortcuts import get_object_or_404
 
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from .models import CareBookmark, Product, ProductImage
@@ -19,7 +19,7 @@ from .services import (
 
 class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
-    parser_classes = [MultiPartParser, FormParser]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_queryset(self):
         return (

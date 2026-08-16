@@ -71,7 +71,18 @@ Authorization: Bearer <access_token>
 - `RECEIPT`
 - `WARRANTY`
 
-수동 등록과 이미지 저장은 지원하지만 OCR 추출은 별도 작업입니다. 다른 사용자의 제품 또는 제품 이미지에는 접근할 수 없습니다.
+수동 등록과 이미지 저장을 지원하며 다른 사용자의 제품 또는 제품 이미지에는 접근할 수 없습니다.
+
+OCR 분석:
+
+```http
+POST /api/products/extract-document/
+Content-Type: multipart/form-data
+```
+
+- `document`: JPG, JPEG, PNG 또는 PDF, 최대 4MB
+- `document_type`: `receipt` 또는 `warranty`
+- Azure 분석에 실패하거나 필드가 누락되면 `manual_input_required`로 직접 입력할 필드를 반환합니다.
 
 ## 케어 가이드
 
@@ -153,10 +164,65 @@ CRUD: `/api/post-images/`
 
 게시글과 댓글은 작성자만 수정·삭제할 수 있고 한 사용자는 같은 게시글에 중복 좋아요할 수 없습니다.
 
+## AI 상품 상담
+
+### 대화 및 추천
+
+```http
+POST /api/ai/chat/
+```
+
+새 상담 요청:
+
+```json
+{
+  "message": "200만원 이하 출근용 가방 추천해줘"
+}
+```
+
+기존 상담 이어가기:
+
+```json
+{
+  "session_id": 1,
+  "message": "검은색 제품으로 다시 추천해줘"
+}
+```
+
+응답의 `recommended_products`에는 최대 3개의 MCM 상품이 포함됩니다. 제공 필드는 `style_code`, `name`, `gender`, `category`, `material`, `size`, `color`, `price`, `price_value`, `style`, `usage`, `image_url`입니다.
+
+서버가 받은 94개 MCM 상품 데이터에서 후보를 먼저 검색한 뒤 그 후보만 AI 답변 근거로 사용합니다. 목록에 없는 상품 정보나 모델이 임의 생성한 식별자는 카드 응답에 사용하지 않습니다.
+
+### 상담 기록
+
+- 목록·상세: `GET /api/ai/chat-sessions/`, `GET /api/ai/chat-sessions/{id}/`
+- 제목 수정: `PATCH /api/ai/chat-sessions/{id}/`
+- 삭제: `DELETE /api/ai/chat-sessions/{id}/`
+
+본인의 상담 기록과 메시지만 조회할 수 있습니다.
+
+### AI 방문 카드
+
+직전 추천 중 하나를 대화로 저장:
+
+```json
+{
+  "session_id": 1,
+  "message": "이 제품 카드로 저장해줘",
+  "product_code": "MWTGATA01CO001"
+}
+```
+
+`product_code`를 생략하면 직전 추천의 첫 번째 상품을 저장합니다.
+
+- 목록·상세: `GET /api/ai/visit-cards/`, `GET /api/ai/visit-cards/{id}/`
+- 직접 저장: `POST /api/ai/visit-cards/` with `style_code`, 선택 `session_id`
+- 삭제: `DELETE /api/ai/visit-cards/{id}/`
+
+같은 사용자가 같은 상품을 다시 저장하면 중복 카드를 만들지 않고 기존 카드를 갱신합니다. 본인의 카드만 조회·삭제할 수 있습니다.
+
 ## 현재 별도 작업
 
-- 영수증·보증서 OCR 추출
-- AI 챗봇 추천·RAG·방문 준비 카드
 - 실제 CV 손상 판독
 - 외부 브랜드 AS 연동
 - 실제 멤버십 결제

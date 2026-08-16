@@ -8,7 +8,12 @@ from apps.accounts.views import EmailTokenView, NotificationViewSet, RegisterVie
 from apps.catalog.views import CareBookmarkViewSet, ProductImageViewSet, ProductViewSet
 from apps.care.views import CareGuideViewSet, DiagnosisViewSet, ServiceRequestViewSet, StoreViewSet, VisitReservationViewSet
 from apps.community.views import CommentViewSet, PostImageViewSet, PostLikeViewSet, PostViewSet
-from apps.ai.views import ChatView, CareRecommendationView, ChatSessionViewSet
+from apps.ai.views import (
+    CareRecommendationView,
+    ChatSessionViewSet,
+    ChatView,
+    VisitCardViewSet,
+)
 
 router = DefaultRouter()
 router.register("products", ProductViewSet, basename="product")
@@ -25,6 +30,7 @@ router.register("comments", CommentViewSet, basename="comment")
 router.register("post-likes", PostLikeViewSet, basename="post-like")
 router.register("notifications", NotificationViewSet, basename="notification")
 router.register("ai/chat-sessions", ChatSessionViewSet, basename="chat-session")
+router.register("ai/visit-cards", VisitCardViewSet, basename="ai-visit-card")
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/auth/register/", RegisterView.as_view()),
