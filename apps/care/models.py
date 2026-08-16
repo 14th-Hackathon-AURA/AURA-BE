@@ -58,18 +58,52 @@ class VisitReservation(models.Model):
         RESERVED = "RESERVED", "Reserved"
         CANCELLED = "CANCELLED", "Cancelled"
         COMPLETED = "COMPLETED", "Completed"
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="visit_reservations")
-    store = models.ForeignKey(Store, on_delete=models.PROTECT, related_name="reservations")
-    product = models.ForeignKey(Product, on_delete=models.SET_NULL, null=True, blank=True)
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="visit_reservations",
+    )
+    store = models.ForeignKey(
+        Store,
+        on_delete=models.PROTECT,
+        related_name="reservations",
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    diagnosis = models.ForeignKey(
+        Diagnosis,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="visit_reservations",
+    )
     visit_at = models.DateTimeField()
     purpose = models.CharField(max_length=100)
     contact_name = models.CharField(max_length=50, blank=True)
     contact_phone = models.CharField(max_length=20, blank=True)
     request_note = models.TextField(blank=True)
     reservation_code = models.CharField(max_length=16, unique=True)
-    status = models.CharField(max_length=12, choices=Status.choices, default=Status.RESERVED)
+    status = models.CharField(
+        max_length=12,
+        choices=Status.choices,
+        default=Status.RESERVED,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("store", "visit_at"),
+                condition=models.Q(status="RESERVED"),
+                name="unique_active_store_visit_slot",
+            )
+        ]
+        
 class ServiceRequest(models.Model):
     class Status(models.TextChoices):
         RECEIVED = "RECEIVED", "Received"
