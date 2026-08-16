@@ -1,5 +1,6 @@
 from django.utils import timezone
 from rest_framework import serializers
+from datetime import time
 
 from .models import (
     CareGuide,
@@ -65,6 +66,7 @@ class VisitReservationSerializer(serializers.ModelSerializer):
             "status",
             "created_at",
         )
+        validators=[]
 
     def validate_product(self, product):
         """다른 사용자의 제품을 예약하는 것을 방지합니다."""
@@ -141,7 +143,18 @@ class VisitReservationSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({
                     "diagnosis": "완료된 진단 결과만 연결할 수 있습니다."
                 })
+                
+        local_visit_at = timezone.localtime(visit_at)
+        visit_time = local_visit_at.time().replace(tzinfo=None)
 
+        opening_time = time(10, 0)  
+        closing_time = time(18, 0)
+
+        if not opening_time <= visit_time < closing_time:
+            raise serializers.ValidationError({
+                "visit_at": "예약 가능 시간은 오전 10시부터 오후 6시까지입니다."
+            })
+            
         conflicts = VisitReservation.objects.filter(
             store=store,
             visit_at=visit_at,
