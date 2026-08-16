@@ -15,6 +15,7 @@ from .models import (
     Store,
     VisitReservation,
 )
+from .diagnosis_services import DiagnosisProviderError, analyze_diagnosis_image
 from .serializers import (
     CareGuideSerializer,
     DiagnosisSerializer,
@@ -51,7 +52,52 @@ class DiagnosisViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
-        serializer.save(requested_by=self.request.user)
+        diagnosis = serializer.save(requested_by=self.request.user)
+        self._analyze(diagnosis)
+
+    def perform_update(self, serializer):
+        diagnosis = serializer.save(
+            status=Diagnosis.Status.PENDING,
+            result={},
+            condition_level="",
+            damage_type="",
+            damage_description="",
+            care_suggestion="",
+            damage_location={},
+        )
+        self._analyze(diagnosis)
+
+    @staticmethod
+    def _analyze(diagnosis):
+        try:
+            analysis = analyze_diagnosis_image(diagnosis)
+        except DiagnosisProviderError:
+            diagnosis.status = Diagnosis.Status.FAILED
+            diagnosis.result = {
+                "analysis_method": "ZERO_SHOT_MULTIMODAL",
+                "error": "이미지 분석에 실패했습니다. 다시 촬영하거나 잠시 후 재시도해 주세요.",
+            }
+            diagnosis.save(update_fields=("status", "result"))
+            return
+
+        diagnosis.status = Diagnosis.Status.DONE
+        diagnosis.condition_level = analysis["condition_level"]
+        diagnosis.damage_type = analysis["damage_type"]
+        diagnosis.damage_description = analysis["damage_description"]
+        diagnosis.care_suggestion = analysis["care_suggestion"]
+        diagnosis.damage_location = analysis["damage_location"]
+        diagnosis.result = analysis["result"]
+        diagnosis.save(
+            update_fields=(
+                "status",
+                "condition_level",
+                "damage_type",
+                "damage_description",
+                "care_suggestion",
+                "damage_location",
+                "result",
+            )
+        )
 
 
 class CareGuideViewSet(viewsets.ReadOnlyModelViewSet):

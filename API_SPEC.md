@@ -104,12 +104,14 @@ GET /api/care-guides/?guide_type=POST_PURCHASE&material=가죽&category=bag&seas
 
 게시되지 않았거나 존재하지 않는 가이드는 북마크할 수 없습니다.
 
-## 진단 데이터
+## AI 손상 진단
 
 - `POST/GET /api/diagnoses/`
 - `GET/PATCH/DELETE /api/diagnoses/{id}/`
 
 생성은 `multipart/form-data`로 `product`, `image`를 전송합니다. 본인 상품의 진단만 생성하고 본인 기록만 조회·수정·삭제할 수 있습니다.
+
+생성 직후 상태를 `PENDING`으로 저장한 뒤 OpenAI 멀티모달 비전 모델로 이미지를 분석합니다. 성공하면 `DONE`, 실패하면 `FAILED`로 자동 변경됩니다. 사진 또는 연결 상품을 수정하면 기존 결과를 초기화하고 다시 분석합니다.
 
 필터:
 
@@ -117,7 +119,19 @@ GET /api/care-guides/?guide_type=POST_PURCHASE&material=가죽&category=bag&seas
 GET /api/diagnoses/?product=3&year=2026
 ```
 
-결과 단계는 `SAFE`, `CAUTION`, `DANGER`이며 화면 표기는 안전·주의·위험입니다. 실제 이미지 판독과 상태 자동 변경은 별도 CV 작업입니다.
+결과 단계는 `SAFE`, `CAUTION`, `DANGER`이며 화면 표기는 안전·주의·위험입니다.
+
+완료 응답의 주요 결과 필드:
+
+- `condition_level`: `SAFE`, `CAUTION`, `DANGER`
+- `damage_type`, `damage_description`
+- `care_suggestion`
+- `damage_location.points`: 이미지 위에 표시할 최대 2개의 `label`, `x_percent`, `y_percent`
+- `result.damage_count`
+- `result.analysis_method`: `ZERO_SHOT_MULTIMODAL`
+- `result.is_reference_only`, `result.notice`
+
+위치 좌표는 이미지 좌측 상단 `(0, 0)`부터 우측 하단 `(100, 100)`까지의 백분율입니다. 비전 모델의 제로샷 분석이므로 촬영 각도와 조명에 따라 결과가 달라질 수 있으며, 응답의 안내 문구와 함께 공식 AS 점검 경로를 제공해야 합니다.
 
 ## 공식 케어·방문 데모 흐름
 
