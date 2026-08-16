@@ -102,6 +102,34 @@ class DiagnosisApiTests(APITestCase):
         analyze_mock.assert_called_once()
         self.assertEqual(self.client.delete(f"/api/diagnoses/{diagnosis.id}/").status_code, 204)
 
+    @patch("apps.care.views.analyze_diagnosis_image")
+    def test_update_without_image_or_product_change_does_not_reanalyze(self, analyze_mock):
+        diagnosis = Diagnosis.objects.create(
+            product=self.product,
+            requested_by=self.user,
+            image=SimpleUploadedFile(
+                "before.gif",
+                self.image_bytes,
+                content_type="image/gif",
+            ),
+            status=Diagnosis.Status.DONE,
+            condition_level=Diagnosis.ConditionLevel.SAFE,
+        )
+
+        response = self.client.patch(
+            f"/api/diagnoses/{diagnosis.id}/",
+            {"product": self.product.id},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], Diagnosis.Status.DONE)
+        self.assertEqual(
+            response.data["condition_level"],
+            Diagnosis.ConditionLevel.SAFE,
+        )
+        analyze_mock.assert_not_called()
+
     def test_other_user_cannot_update_or_delete_diagnosis(self):
         diagnosis = Diagnosis.objects.create(
             product=self.other_product,
