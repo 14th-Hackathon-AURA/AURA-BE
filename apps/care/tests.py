@@ -1,4 +1,5 @@
 import base64
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -6,6 +7,7 @@ from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from apps.catalog.models import Product
+from .diagnosis_services import DiagnosisProviderError
 from .models import CareGuide, Diagnosis, Store, VisitReservation
 
 
@@ -20,17 +22,58 @@ class DiagnosisApiTests(APITestCase):
         self.other_product = Product.objects.create(user=self.other, name="Other", category="bag")
         self.client.force_authenticate(self.user)
 
-    def test_create_and_filter_diagnosis(self):
+    @staticmethod
+    def analysis_result():
+        return {
+            "condition_level": "CAUTION",
+            "damage_type": "표면 얼룩",
+            "damage_description": "가방 전면에 옅은 얼룩이 보입니다.",
+            "care_suggestion": "마른 부드러운 천으로 가볍게 닦아 주세요.",
+            "damage_location": {
+                "points": [
+                    {
+                        "label": "전면 얼룩",
+                        "x_percent": 48.0,
+                        "y_percent": 55.0,
+                    }
+                ]
+            },
+            "result": {
+                "analysis_method": "ZERO_SHOT_MULTIMODAL",
+                "damage_count": 1,
+                "is_reference_only": True,
+            },
+        }
+
+    @patch("apps.care.views.analyze_diagnosis_image")
+    def test_create_analyzes_and_filters_diagnosis(self, analyze_mock):
+        analyze_mock.return_value = self.analysis_result()
         image = SimpleUploadedFile("damage.gif", self.image_bytes, content_type="image/gif")
         response = self.client.post(
             "/api/diagnoses/", {"product": self.product.id, "image": image}, format="multipart"
         )
         self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["status"], Diagnosis.Status.DONE)
+        self.assertEqual(response.data["condition_level"], Diagnosis.ConditionLevel.CAUTION)
+        self.assertEqual(response.data["result"]["damage_count"], 1)
         response = self.client.get(
             "/api/diagnoses/", {"product": self.product.id, "year": timezone.now().year}
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 1)
+
+    @patch("apps.care.views.analyze_diagnosis_image")
+    def test_provider_failure_marks_diagnosis_failed(self, analyze_mock):
+        analyze_mock.side_effect = DiagnosisProviderError("provider failed")
+        image = SimpleUploadedFile("damage.gif", self.image_bytes, content_type="image/gif")
+
+        response = self.client.post(
+            "/api/diagnoses/", {"product": self.product.id, "image": image}, format="multipart"
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["status"], Diagnosis.Status.FAILED)
+        self.assertNotIn("provider failed", str(response.data["result"]))
 
     def test_cannot_diagnose_other_users_product(self):
         image = SimpleUploadedFile("damage.gif", self.image_bytes, content_type="image/gif")
@@ -42,7 +85,9 @@ class DiagnosisApiTests(APITestCase):
     def test_invalid_year_is_validation_error(self):
         self.assertEqual(self.client.get("/api/diagnoses/", {"year": "bad"}).status_code, 400)
 
-    def test_owner_can_update_and_delete_diagnosis(self):
+    @patch("apps.care.views.analyze_diagnosis_image")
+    def test_owner_can_update_reanalyze_and_delete_diagnosis(self, analyze_mock):
+        analyze_mock.return_value = self.analysis_result()
         diagnosis = Diagnosis.objects.create(
             product=self.product,
             requested_by=self.user,
@@ -53,6 +98,8 @@ class DiagnosisApiTests(APITestCase):
             f"/api/diagnoses/{diagnosis.id}/", {"image": replacement}, format="multipart"
         )
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], Diagnosis.Status.DONE)
+        analyze_mock.assert_called_once()
         self.assertEqual(self.client.delete(f"/api/diagnoses/{diagnosis.id}/").status_code, 204)
 
     def test_other_user_cannot_update_or_delete_diagnosis(self):
