@@ -100,6 +100,21 @@ class DiagnosisViewSet(viewsets.ModelViewSet):
         self._analyze(diagnosis)
 
     def perform_update(self, serializer):
+        current = serializer.instance
+        validated_data = serializer.validated_data
+        product = validated_data.get("product")
+        should_reanalyze = (
+            "image" in validated_data
+            or (
+                product is not None
+                and product.pk != current.product_id
+            )
+        )
+
+        if not should_reanalyze:
+            serializer.save()
+            return
+
         diagnosis = serializer.save(
             status=Diagnosis.Status.PENDING,
             result={},
