@@ -139,7 +139,37 @@ GET /api/diagnoses/?product=3&year=2026
 - 방문 예약: CRUD `/api/visit-reservations/`
 - 서비스 요청: CRUD `/api/service-requests/`
 
-방문 예약은 `store`, 선택 `product`, `visit_at`, `purpose`, `contact_name`, `contact_phone`, `request_note`를 저장합니다. 서비스 요청은 본인 상품과 본인 방문 예약만 연결할 수 있습니다.
+매장 목록은 다음 검색 조건을 지원합니다.
+
+```http
+GET /api/stores/?q=서울&latitude=37.5172&longitude=127.0473&limit=2
+```
+
+- `q`: 매장명·주소·시도·시군구·매장 유형·채널 검색
+- `latitude`, `longitude`: 현재 위치이며 반드시 함께 전달
+- `limit`: 1~100개의 결과 제한
+
+매장 목록 응답은 배열이 아니라 다음 객체 형태입니다.
+
+```json
+{
+  "count": 2,
+  "search": "서울",
+  "location_used": true,
+  "stores": [
+    {
+      "id": 1,
+      "name": "청담 공식 AS 센터",
+      "distance_km": 1.8,
+      "map_search_url": "https://map.naver.com/p/search/..."
+    }
+  ]
+}
+```
+
+방문 예약은 필수 `store`, 필수 `product`, `visit_at`, `purpose`와 선택
+`diagnosis`, `contact_name`, `contact_phone`, `request_note`를 저장합니다.
+서비스 요청은 본인 상품과 본인 방문 예약만 연결할 수 있습니다.
 
 이는 AURA 내부 데모 흐름이며 실제 브랜드 AS 시스템과 직접 연동하지 않습니다.
 

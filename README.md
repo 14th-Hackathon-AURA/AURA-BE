@@ -120,24 +120,45 @@ Authorization: Bearer {access_token}
 
 AS를 지원하는 `supports_as=true` 매장만 반환합니다.
 
+매장명·주소·지역·매장 유형은 `q`로 검색할 수 있습니다. 현재 위치의
+위도와 경도를 함께 전달하면 가까운 매장부터 정렬되며, `limit`으로 반환
+개수를 제한할 수 있습니다.
+
+```http
+GET /api/stores/?q=서울&latitude=37.5172&longitude=127.0473&limit=2
+Authorization: Bearer {access_token}
+```
+
+- `latitude`와 `longitude`는 반드시 함께 전달합니다.
+- `limit`은 1부터 100까지 사용할 수 있습니다.
+- 좌표가 없는 매장은 거리순 목록의 마지막에 표시됩니다.
+
 응답 예시:
 
 ```json
-[
-  {
-    "id": 1,
-    "name": "청담 공식 AS 센터",
-    "address": "서울특별시 강남구 압구정로 123",
-    "phone": "02-1234-5678",
-    "latitude": "37.525000",
-    "longitude": "127.040000",
-    "opening_hours": "월-토 10:00-18:00",
-    "supports_as": true
-  }
-]
+{
+  "count": 1,
+  "search": "서울",
+  "location_used": true,
+  "stores": [
+    {
+      "id": 1,
+      "name": "청담 공식 AS 센터",
+      "address": "서울특별시 강남구 압구정로 123",
+      "phone": "02-1234-5678",
+      "latitude": "37.5250000",
+      "longitude": "127.0400000",
+      "opening_hours": "월-토 10:00-18:00",
+      "supports_as": true,
+      "distance_km": 1.8,
+      "map_search_url": "https://map.naver.com/p/search/..."
+    }
+  ]
+}
 ```
 
-매장 API는 조회 전용입니다. 테스트용 매장 데이터는 Django 관리자 페이지 또는 Django shell에서 등록해야 합니다.
+매장 API는 조회 전용입니다. MCM 매장 CSV는 `import_mcm_stores` 관리 명령으로
+등록하며, 좌표 생성이 필요하면 `--geocode`와 Kakao REST API 키를 사용합니다.
 
 ## 예약 가능 시간 조회
 
