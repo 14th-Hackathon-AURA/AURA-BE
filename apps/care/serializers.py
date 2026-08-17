@@ -1,6 +1,8 @@
+from datetime import time
+from urllib.parse import quote
+
 from django.utils import timezone
 from rest_framework import serializers
-from datetime import time
 
 from .models import (
     CareGuide,
@@ -42,9 +44,33 @@ class CareGuideSerializer(serializers.ModelSerializer):
 
 
 class StoreSerializer(serializers.ModelSerializer):
+    distance_km = serializers.FloatField(read_only=True)
+    map_search_url = serializers.SerializerMethodField()
+
     class Meta:
         model = Store
-        fields = "__all__"
+        fields = (
+            "id",
+            "name",
+            "address",
+            "phone",
+            "sido",
+            "sigungu",
+            "store_type",
+            "channel",
+            "official_store_id",
+            "latitude",
+            "longitude",
+            "opening_hours",
+            "supports_as",
+            "source_url",
+            "distance_km",
+            "map_search_url",
+        )
+
+    def get_map_search_url(self, store):
+        keyword = quote(f"{store.name} {store.address}")
+        return f"https://map.naver.com/p/search/{keyword}"
 
 
 class VisitReservationSerializer(serializers.ModelSerializer):
@@ -66,10 +92,12 @@ class VisitReservationSerializer(serializers.ModelSerializer):
             "status",
             "created_at",
         )
-        validators=[]
+
+        # DB UniqueConstraint의 기본 오류 메시지 대신
+        # validate()의 한국어 오류 메시지를 사용합니다.
+        validators = []
 
     def validate_product(self, product):
-        """다른 사용자의 제품을 예약하는 것을 방지합니다."""
         if product and product.user != self.context["request"].user:
             raise serializers.ValidationError(
                 "본인의 제품만 선택할 수 있습니다."
@@ -77,7 +105,6 @@ class VisitReservationSerializer(serializers.ModelSerializer):
         return product
 
     def validate_store(self, store):
-        """AS를 지원하는 매장만 예약할 수 있습니다."""
         if not store.supports_as:
             raise serializers.ValidationError(
                 "AS를 지원하는 매장만 예약할 수 있습니다."
@@ -85,7 +112,6 @@ class VisitReservationSerializer(serializers.ModelSerializer):
         return store
 
     def validate_visit_at(self, visit_at):
-        """과거 및 30분 단위가 아닌 예약을 방지합니다."""
         if visit_at <= timezone.now():
             raise serializers.ValidationError(
                 "방문 일시는 현재 이후여야 합니다."
@@ -143,18 +169,21 @@ class VisitReservationSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({
                     "diagnosis": "완료된 진단 결과만 연결할 수 있습니다."
                 })
-                
+
         local_visit_at = timezone.localtime(visit_at)
         visit_time = local_visit_at.time().replace(tzinfo=None)
 
-        opening_time = time(10, 0)  
+        opening_time = time(10, 0)
         closing_time = time(18, 0)
 
         if not opening_time <= visit_time < closing_time:
             raise serializers.ValidationError({
-                "visit_at": "예약 가능 시간은 오전 10시부터 오후 6시까지입니다."
+                "visit_at": (
+                    "예약 가능 시간은 오전 10시부터 "
+                    "오후 6시까지입니다."
+                )
             })
-            
+
         conflicts = VisitReservation.objects.filter(
             store=store,
             visit_at=visit_at,
@@ -216,7 +245,9 @@ class ServiceRequestSerializer(serializers.ModelSerializer):
             and reservation.product_id != product.id
         ):
             raise serializers.ValidationError({
-                "reservation": "방문 예약과 AS 요청의 제품이 일치해야 합니다."
+                "reservation": (
+                    "방문 예약과 AS 요청의 제품이 일치해야 합니다."
+                )
             })
 
         if (

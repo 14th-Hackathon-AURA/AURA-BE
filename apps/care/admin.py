@@ -14,13 +14,25 @@ class StoreAdmin(admin.ModelAdmin):
     list_display = (
         "id",
         "name",
-        "address",
+        "sido",
+        "sigungu",
+        "store_type",
         "phone",
-        "opening_hours",
         "supports_as",
     )
-    list_filter = ("supports_as",)
-    search_fields = ("name", "address", "phone")
+    list_filter = (
+        "sido",
+        "store_type",
+        "channel",
+        "supports_as",
+    )
+    search_fields = (
+        "name",
+        "address",
+        "sido",
+        "sigungu",
+        "phone",
+    )
 
 
 @admin.register(VisitReservation)
@@ -34,7 +46,10 @@ class VisitReservationAdmin(admin.ModelAdmin):
         "visit_at",
         "status",
     )
-    list_filter = ("status", "store")
+    list_filter = (
+        "status",
+        "store",
+    )
     search_fields = (
         "reservation_code",
         "contact_name",
@@ -87,4 +102,7 @@ class ServiceRequestAdmin(admin.ModelAdmin):
         "status",
         "created_at",
     )
-    list_filter = ("status", "store")
+    list_filter = (
+        "status",
+        "store",
+    )
