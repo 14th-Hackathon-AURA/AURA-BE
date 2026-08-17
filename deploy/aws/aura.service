@@ -5,8 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=www-data
-Group=www-data
+User=aura
+Group=aura
 WorkingDirectory=/srv/aura
 EnvironmentFile=/etc/aura/aura.env
 ExecStart=/srv/aura/.venv/bin/gunicorn config.wsgi:application --bind 127.0.0.1:8000 --workers 2 --timeout 120 --access-logfile - --error-logfile -
