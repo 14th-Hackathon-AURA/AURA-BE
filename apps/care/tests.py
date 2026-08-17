@@ -1,6 +1,6 @@
 import base64
 from unittest.mock import patch
-
+from datetime import datetime, time, timedelta
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
@@ -158,3 +158,159 @@ class DiagnosisApiTests(APITestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertIn("reservation", response.data)
+
+class ReservationStoreSelectionApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="reservation-owner",
+            password="strong-pass-123",
+        )
+        self.product = Product.objects.create(
+            user=self.user,
+            name="MCM Bag",
+            category="bag",
+        )
+
+        self.near_store = Store.objects.create(
+            name="가까운 MCM 매장",
+            address="서울특별시 강남구",
+            phone="02-1111-1111",
+            sido="서울특별시",
+            sigungu="강남구",
+            store_type="플래그십",
+            latitude="37.5180000",
+            longitude="127.0480000",
+            opening_hours="매일 10:00-18:00",
+            supports_as=True,
+        )
+        self.far_store = Store.objects.create(
+            name="먼 MCM 매장",
+            address="서울특별시 송파구",
+            phone="02-2222-2222",
+            sido="서울특별시",
+            sigungu="송파구",
+            store_type="백화점",
+            latitude="37.5100000",
+            longitude="127.1100000",
+            opening_hours="매일 10:00-18:00",
+            supports_as=True,
+        )
+
+        self.client.force_authenticate(self.user)
+
+    def future_visit_at(self):
+        selected_date = timezone.localdate() + timedelta(days=1)
+
+        return timezone.make_aware(
+            datetime.combine(
+                selected_date,
+                time(10, 0),
+            )
+        )
+
+    def test_nearby_stores_are_returned_in_distance_order(self):
+        response = self.client.get(
+            "/api/stores/",
+            {
+                "latitude": "37.5172",
+                "longitude": "127.0473",
+                "limit": "2",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 2)
+        self.assertTrue(response.data["location_used"])
+        self.assertEqual(
+            response.data["stores"][0]["id"],
+            self.near_store.id,
+        )
+        self.assertIsNotNone(
+            response.data["stores"][0]["distance_km"]
+        )
+
+    def test_store_search_filters_reservation_options(self):
+        response = self.client.get(
+            "/api/stores/",
+            {"q": "강남"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(
+            response.data["stores"][0]["id"],
+            self.near_store.id,
+        )
+
+    def test_create_reservation_with_selected_store(self):
+        visit_at = self.future_visit_at()
+
+        response = self.client.post(
+            "/api/visit-reservations/",
+            {
+                "product": self.product.id,
+                "store": self.near_store.id,
+                "visit_at": visit_at.isoformat(),
+                "purpose": "제품 상태 점검",
+                "contact_name": "홍길동",
+                "contact_phone": "010-1234-5678",
+                "request_note": "방문 전 연락 부탁드립니다.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(
+            response.data["store"],
+            self.near_store.id,
+        )
+        self.assertEqual(
+            response.data["store_detail"]["id"],
+            self.near_store.id,
+        )
+        self.assertEqual(
+            response.data["store_detail"]["name"],
+            self.near_store.name,
+        )
+        self.assertEqual(
+            response.data["status"],
+            VisitReservation.Status.RESERVED,
+        )
+
+    def test_availability_contains_selected_store_detail(self):
+        selected_date = (
+            timezone.localdate() + timedelta(days=1)
+        )
+
+        response = self.client.get(
+            "/api/visit-reservations/availability/",
+            {
+                "store": self.near_store.id,
+                "date": selected_date.isoformat(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["store"]["id"],
+            self.near_store.id,
+        )
+        self.assertEqual(
+            response.data["store"]["address"],
+            self.near_store.address,
+        )
+        self.assertIn("slots", response.data)
+
+    def test_reservation_requires_store(self):
+        response = self.client.post(
+            "/api/visit-reservations/",
+            {
+                "product": self.product.id,
+                "visit_at": self.future_visit_at().isoformat(),
+                "purpose": "제품 상태 점검",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("store", response.data)

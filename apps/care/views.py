@@ -92,31 +92,6 @@ class DiagnosisViewSet(viewsets.ModelViewSet):
 
         return queryset
     
-class DiagnosisViewSet(viewsets.ModelViewSet):
-    serializer_class = DiagnosisSerializer
-
-    def get_queryset(self):
-        queryset = Diagnosis.objects.filter(
-            requested_by=self.request.user
-        ).order_by("-created_at")
-
-        product_id = self.request.query_params.get("product")
-        year = self.request.query_params.get("year")
-
-        if product_id:
-            queryset = queryset.filter(product_id=product_id)
-
-        if year:
-            try:
-                queryset = queryset.filter(
-                    created_at__year=int(year)
-                )
-            except (TypeError, ValueError):
-                raise ValidationError({
-                    "year": "연도는 숫자로 입력해야 합니다."
-                })
-
-        return queryset
 
     def perform_create(self, serializer):
         diagnosis = serializer.save(
@@ -478,13 +453,14 @@ class VisitReservationViewSet(viewsets.ModelViewSet):
             current_datetime += timedelta(minutes=30)
 
         return Response({
-            "store": {
-                "id": store.id,
-                "name": store.name,
-            },
-            "date": date_value,
-            "slots": slots,
+            "store":StoreSerializer(
+                store,
+                context=self.get_serializer_context(),
+            ).data,
+            "date":date_value,
+            "slots":slots,
         })
+
 
     @action(
         detail=True,

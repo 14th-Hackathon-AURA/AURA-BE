@@ -82,6 +82,10 @@ class VisitReservationSerializer(serializers.ModelSerializer):
         source="store.name",
         read_only=True,
     )
+    store_detail = StoreSerializer(
+        source="store",
+        read_only=True,
+    )
 
     class Meta:
         model = VisitReservation
@@ -93,15 +97,19 @@ class VisitReservationSerializer(serializers.ModelSerializer):
             "created_at",
         )
 
-        # DB UniqueConstraint의 기본 오류 메시지 대신
-        # validate()의 한국어 오류 메시지를 사용합니다.
+        # DB UniqueConstraint의 기본 메시지 대신
+        # validate()에서 정의한 한국어 메시지를 사용합니다.
         validators = []
 
     def validate_product(self, product):
-        if product and product.user != self.context["request"].user:
+        if (
+            product
+            and product.user != self.context["request"].user
+        ):
             raise serializers.ValidationError(
                 "본인의 제품만 선택할 수 있습니다."
             )
+
         return product
 
     def validate_store(self, store):
@@ -109,6 +117,7 @@ class VisitReservationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "AS를 지원하는 매장만 예약할 수 있습니다."
             )
+
         return store
 
     def validate_visit_at(self, visit_at):
@@ -154,20 +163,31 @@ class VisitReservationSerializer(serializers.ModelSerializer):
                 "product": "예약할 제품을 선택해 주세요."
             })
 
+        if not store:
+            raise serializers.ValidationError({
+                "store": "예약할 매장을 선택해 주세요."
+            })
+
         if diagnosis:
             if diagnosis.requested_by_id != request.user.id:
                 raise serializers.ValidationError({
-                    "diagnosis": "본인의 진단 결과만 연결할 수 있습니다."
+                    "diagnosis": (
+                        "본인의 진단 결과만 연결할 수 있습니다."
+                    )
                 })
 
             if diagnosis.product_id != product.id:
                 raise serializers.ValidationError({
-                    "diagnosis": "진단 제품과 예약 제품이 일치해야 합니다."
+                    "diagnosis": (
+                        "진단 제품과 예약 제품이 일치해야 합니다."
+                    )
                 })
 
             if diagnosis.status != Diagnosis.Status.DONE:
                 raise serializers.ValidationError({
-                    "diagnosis": "완료된 진단 결과만 연결할 수 있습니다."
+                    "diagnosis": (
+                        "완료된 진단 결과만 연결할 수 있습니다."
+                    )
                 })
 
         local_visit_at = timezone.localtime(visit_at)
@@ -199,7 +219,6 @@ class VisitReservationSerializer(serializers.ModelSerializer):
             })
 
         return attrs
-
 
 class ServiceRequestSerializer(serializers.ModelSerializer):
     class Meta:
