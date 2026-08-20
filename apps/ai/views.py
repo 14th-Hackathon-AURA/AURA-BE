@@ -12,19 +12,18 @@ from .serializers import (
     ChatSessionSerializer,
     VisitCardSerializer,
 )
-from .services import AIProviderError, generate_care_reply, generate_chat_reply
+from .services import (
+    AIProviderError,
+    generate_care_reply,
+    generate_chat_reply,
+    generate_visit_card_summary,
+)
+from .visit_cards import is_visit_card_save_request
 
 
 class AIServiceUnavailable(APIException):
     status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     default_detail = "AI 상담 서비스를 사용할 수 없습니다. 잠시 후 다시 시도해 주세요."
-
-
-def _is_save_request(message):
-    normalized = message.replace(" ", "")
-    return "저장" in normalized and (
-        "카드" in normalized or "추천" in normalized
-    )
 
 
 def _save_recommended_product(*, session, user, product_code=None):
@@ -37,20 +36,10 @@ def _save_recommended_product(*, session, user, product_code=None):
     if not product:
         return None
 
-    # A session can contain assistant messages confirming that another product
-    # was saved. Those confirmations are UI feedback, not consultation content,
-    # so keep walking backwards until the latest actual consultation answer.
-    previous_answer = next(
-        (
-            chat_message.content
-            for chat_message in session.messages.filter(
-                role=ChatMessage.Role.ASSISTANT
-            )
-            .only("content", "metadata")
-            .order_by("-created_at")
-            if "visit_card" not in chat_message.metadata
-        ),
-        "",
+    consultation_summary = generate_visit_card_summary(
+        session=session,
+        user=user,
+        product=product,
     )
     card, _ = VisitCard.objects.update_or_create(
         user=user,
@@ -58,7 +47,7 @@ def _save_recommended_product(*, session, user, product_code=None):
         defaults={
             "session": session,
             "product": product,
-            "consultation_summary": previous_answer,
+            "consultation_summary": consultation_summary,
         },
     )
     return card
@@ -89,11 +78,13 @@ class ChatView(APIView):
                 title=message[:30],
             )
 
-        if _is_save_request(message):
+        if is_visit_card_save_request(message):
             card = _save_recommended_product(
                 session=session,
                 user=request.user,
-                product_code=request_serializer.validated_data.get("product_code"),
+                product_code=request_serializer.validated_data.get(
+                    "product_code"
+                ),
             )
             if not card:
                 return Response(
@@ -186,7 +177,6 @@ class VisitCardViewSet(viewsets.ModelViewSet):
         return VisitCard.objects.filter(user=self.request.user).order_by(
             "-created_at"
         )
-
 
 class CareRecommendationView(APIView):
     permission_classes = [permissions.IsAuthenticated]
