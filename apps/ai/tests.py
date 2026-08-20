@@ -8,6 +8,7 @@ from apps.accounts.models import Profile
 from .catalog import get_product, load_catalog, recommend_products
 from .models import ChatMessage, ChatSession, VisitCard
 from .services import (
+    VISIT_CARD_SUMMARY_MAX_LENGTH,
     VISIT_CARD_SUMMARY_FALLBACK,
     generate_visit_card_summary,
 )
@@ -185,7 +186,30 @@ class ChatApiTests(APITestCase):
             product=product,
         )
 
-        self.assertEqual(summary, "니즈를 파악중입니다..")
+        self.assertEqual(
+            summary,
+            "상담 요약을 생성하지 못했습니다. 잠시 후 카드를 다시 저장해 주세요.",
+        )
+        self.assertEqual(summary, VISIT_CARD_SUMMARY_FALLBACK)
+
+    @patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"})
+    @patch("apps.ai.services.OpenAI")
+    def test_visit_card_summary_rejects_more_than_300_characters(
+        self,
+        openai_mock,
+    ):
+        product = load_catalog()[0]
+        session = ChatSession.objects.create(user=self.user)
+        openai_mock.return_value.responses.create.return_value.output_text = (
+            "가" * (VISIT_CARD_SUMMARY_MAX_LENGTH + 1)
+        )
+
+        summary = generate_visit_card_summary(
+            session=session,
+            user=self.user,
+            product=product,
+        )
+
         self.assertEqual(summary, VISIT_CARD_SUMMARY_FALLBACK)
 
     def test_visit_cards_are_private(self):

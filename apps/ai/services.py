@@ -86,7 +86,10 @@ VISIT_CARD_SUMMARY_PROMPT = """당신은 AURA의 AI 방문 카드 문구 작성�
 문체 예시:
 "하늘님이 원한다고 언급하신 브라운 색상의 스카프입니다. 사이즈에 구애받지 않길 바라신 조건에 맞는 프리사이즈 제품이며, 착용 예정인 블랙 슈트에도 어울리는 색상 구성입니다. 언급하신 예산 50만원 안에서 구매 가능합니다."
 """
-VISIT_CARD_SUMMARY_FALLBACK = "니즈를 파악중입니다.."
+VISIT_CARD_SUMMARY_MAX_LENGTH = 300
+VISIT_CARD_SUMMARY_FALLBACK = (
+    "상담 요약을 생성하지 못했습니다. 잠시 후 카드를 다시 저장해 주세요."
+)
 
 
 def generate_visit_card_summary(*, session, user, product):
@@ -113,7 +116,7 @@ def generate_visit_card_summary(*, session, user, product):
             store=False,
         )
         summary = " ".join((response.output_text or "").split())
-        if not summary or len(summary) > 500:
+        if not summary or len(summary) > VISIT_CARD_SUMMARY_MAX_LENGTH:
             return VISIT_CARD_SUMMARY_FALLBACK
         if any(marker in summary for marker in ("http://", "https://", "![")):
             return VISIT_CARD_SUMMARY_FALLBACK
