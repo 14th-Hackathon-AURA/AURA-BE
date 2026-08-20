@@ -3,6 +3,8 @@ import os
 
 from openai import OpenAI
 
+from .visit_cards import get_recent_user_requests
+
 
 SYSTEM_PROMPT = """당신은 AURA의 MCM 상품 상담사입니다.
 사용자의 예산, 선호 스타일, 사용 상황을 파악해 제공된 MCM 후보 상품 안에서만 안내하세요.
@@ -65,6 +67,59 @@ def generate_chat_reply(*, session, user, candidates):
     if not answer:
         raise AIProviderError("AI가 빈 응답을 반환했습니다.")
     return answer
+
+
+VISIT_CARD_SUMMARY_PROMPT = """당신은 AURA의 AI 방문 카드 문구 작성자입니다.
+사용자가 상담에서 말한 구체적인 니즈와 선택한 MCM 상품이 왜 맞는지를 한국어 존댓말 한 문단으로 요약하세요.
+
+작성 규칙:
+- 2~4문장, 300자 이내로 작성합니다.
+- 첫 문장부터 사용자 닉네임과 실제로 언급한 니즈를 자연스럽게 연결합니다.
+- 색상, 카테고리, 소재, 사이즈, 스타일, 사용 상황, 예산 중 사용자가 실제로 말한 조건을 우선 반영합니다.
+- 선택 상품 정보와 조건이 맞는 이유를 구체적으로 설명합니다.
+- 사용자가 말하지 않은 취향이나 상황을 지어내지 않습니다.
+- 상품 데이터에 없는 재고, 할인, 매장 정책을 지어내지 않습니다.
+- 여러 상품을 나열하지 말고 선택한 상품 하나만 설명합니다.
+- 제목, 목록, 해시태그, Markdown, 이미지, URL은 출력하지 않습니다.
+- 조건과 상품 정보가 일치하지 않으면 일치한다고 거짓으로 단정하지 않습니다.
+
+문체 예시:
+"하늘님이 원한다고 언급하신 브라운 색상의 스카프입니다. 사이즈에 구애받지 않길 바라신 조건에 맞는 프리사이즈 제품이며, 착용 예정인 블랙 슈트에도 어울리는 색상 구성입니다. 언급하신 예산 50만원 안에서 구매 가능합니다."
+"""
+VISIT_CARD_SUMMARY_FALLBACK = "니즈를 파악중입니다.."
+
+
+def generate_visit_card_summary(*, session, user, product):
+    try:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            return VISIT_CARD_SUMMARY_FALLBACK
+
+        context = {
+            "nickname": _profile_context(user).get("nickname") or "고객",
+            "user_requests": get_recent_user_requests(session),
+            "selected_product": product,
+        }
+        response = OpenAI(
+            api_key=api_key,
+            timeout=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "30")),
+        ).responses.create(
+            model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
+            instructions=VISIT_CARD_SUMMARY_PROMPT,
+            input=json.dumps(context, ensure_ascii=False),
+            max_output_tokens=int(
+                os.getenv("OPENAI_VISIT_CARD_MAX_OUTPUT_TOKENS", "220")
+            ),
+            store=False,
+        )
+        summary = " ".join((response.output_text or "").split())
+        if not summary or len(summary) > 500:
+            return VISIT_CARD_SUMMARY_FALLBACK
+        if any(marker in summary for marker in ("http://", "https://", "![")):
+            return VISIT_CARD_SUMMARY_FALLBACK
+        return summary.replace("**", "").replace("#", "")
+    except Exception:
+        return VISIT_CARD_SUMMARY_FALLBACK
 
 
 def generate_care_reply(context):

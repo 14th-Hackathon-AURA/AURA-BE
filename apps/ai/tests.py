@@ -7,6 +7,10 @@ from apps.accounts.models import Profile
 
 from .catalog import get_product, load_catalog, recommend_products
 from .models import ChatMessage, ChatSession, VisitCard
+from .services import (
+    VISIT_CARD_SUMMARY_FALLBACK,
+    generate_visit_card_summary,
+)
 
 
 class ProductCatalogTests(APITestCase):
@@ -79,8 +83,19 @@ class ChatApiTests(APITestCase):
         )
         mock_reply.assert_called_once()
 
+    @patch(
+        "apps.ai.views.generate_visit_card_summary",
+        return_value=(
+            "아기사자님이 데이트용으로 원하신 가방입니다. "
+            "선택한 상품의 스타일과 사용 상황이 요청하신 조건에 어울립니다."
+        ),
+    )
     @patch("apps.ai.views.generate_chat_reply", return_value="추천 결과입니다.")
-    def test_chat_saves_last_recommendation_as_visit_card(self, mock_reply):
+    def test_chat_saves_last_recommendation_as_visit_card(
+        self,
+        mock_reply,
+        mock_summary,
+    ):
         recommendation = self.client.post(
             "/api/ai/chat/",
             {"message": "데이트용 가방 추천해줘"},
@@ -101,10 +116,11 @@ class ChatApiTests(APITestCase):
 
         self.assertEqual(saved.status_code, 200)
         self.assertEqual(saved.data["visit_card"]["style_code"], product["style_code"])
-        self.assertEqual(
-            saved.data["visit_card"]["consultation_summary"],
-            "추천 결과입니다.",
-        )
+        summary = saved.data["visit_card"]["consultation_summary"]
+        self.assertIn("아기사자님이 데이트용으로 원하신 가방", summary)
+        self.assertNotIn("추천 결과입니다.", summary)
+        self.assertNotIn("http", summary)
+        self.assertNotIn("**", summary)
         self.assertEqual(VisitCard.objects.filter(user=self.user).count(), 1)
 
         saved_again = self.client.post(
@@ -120,11 +136,57 @@ class ChatApiTests(APITestCase):
         self.assertEqual(VisitCard.objects.filter(user=self.user).count(), 1)
         self.assertEqual(
             saved_again.data["visit_card"]["consultation_summary"],
-            "추천 결과입니다.",
+            summary,
         )
 
         card = VisitCard.objects.get(user=self.user)
-        self.assertEqual(card.consultation_summary, "추천 결과입니다.")
+        self.assertEqual(card.consultation_summary, summary)
+        self.assertEqual(mock_summary.call_count, 2)
+
+    @patch(
+        "apps.ai.serializers.generate_visit_card_summary",
+        return_value=(
+            "아기사자님이 출근할 때 사용할 검은색 가방입니다. "
+            "선택한 상품은 요청하신 사용 상황에 적합합니다."
+        ),
+    )
+    def test_direct_visit_card_uses_server_generated_summary(self, mock_summary):
+        product = load_catalog()[0]
+        session = ChatSession.objects.create(user=self.user)
+        ChatMessage.objects.create(
+            session=session,
+            role=ChatMessage.Role.USER,
+            content="출근할 때 쓸 검은색 가방을 추천해줘",
+        )
+
+        response = self.client.post(
+            "/api/ai/visit-cards/",
+            {
+                "session_id": session.id,
+                "style_code": product["style_code"],
+                "consultation_summary": "프론트에서 보낸 임의의 전체 답변",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertIn("출근할 때 사용할 검은색 가방", response.data["consultation_summary"])
+        self.assertNotIn("프론트에서 보낸 임의의 전체 답변", response.data["consultation_summary"])
+        mock_summary.assert_called_once()
+
+    @patch.dict("os.environ", {"OPENAI_API_KEY": ""})
+    def test_visit_card_summary_uses_fallback_when_generation_fails(self):
+        product = load_catalog()[0]
+        session = ChatSession.objects.create(user=self.user)
+
+        summary = generate_visit_card_summary(
+            session=session,
+            user=self.user,
+            product=product,
+        )
+
+        self.assertEqual(summary, "니즈를 파악중입니다..")
+        self.assertEqual(summary, VISIT_CARD_SUMMARY_FALLBACK)
 
     def test_visit_cards_are_private(self):
         product = get_product(load_catalog()[0]["style_code"])
