@@ -37,12 +37,20 @@ def _save_recommended_product(*, session, user, product_code=None):
     if not product:
         return None
 
-    previous_answer = (
-        session.messages.filter(role=ChatMessage.Role.ASSISTANT)
-        .order_by("-created_at")
-        .values_list("content", flat=True)
-        .first()
-        or ""
+    # A session can contain assistant messages confirming that another product
+    # was saved. Those confirmations are UI feedback, not consultation content,
+    # so keep walking backwards until the latest actual consultation answer.
+    previous_answer = next(
+        (
+            chat_message.content
+            for chat_message in session.messages.filter(
+                role=ChatMessage.Role.ASSISTANT
+            )
+            .only("content", "metadata")
+            .order_by("-created_at")
+            if "visit_card" not in chat_message.metadata
+        ),
+        "",
     )
     card, _ = VisitCard.objects.update_or_create(
         user=user,

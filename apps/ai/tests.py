@@ -101,6 +101,10 @@ class ChatApiTests(APITestCase):
 
         self.assertEqual(saved.status_code, 200)
         self.assertEqual(saved.data["visit_card"]["style_code"], product["style_code"])
+        self.assertEqual(
+            saved.data["visit_card"]["consultation_summary"],
+            "추천 결과입니다.",
+        )
         self.assertEqual(VisitCard.objects.filter(user=self.user).count(), 1)
 
         saved_again = self.client.post(
@@ -114,6 +118,13 @@ class ChatApiTests(APITestCase):
         )
         self.assertEqual(saved_again.status_code, 200)
         self.assertEqual(VisitCard.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(
+            saved_again.data["visit_card"]["consultation_summary"],
+            "추천 결과입니다.",
+        )
+
+        card = VisitCard.objects.get(user=self.user)
+        self.assertEqual(card.consultation_summary, "추천 결과입니다.")
 
     def test_visit_cards_are_private(self):
         product = get_product(load_catalog()[0]["style_code"])
