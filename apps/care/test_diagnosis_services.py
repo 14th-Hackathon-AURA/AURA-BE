@@ -37,6 +37,9 @@ class DiagnosisServiceTests(SimpleTestCase):
     @patch("apps.care.diagnosis_services.OpenAI")
     def test_returns_validated_structured_analysis(self, openai_mock):
         parsed = DamageAnalysis(
+            is_bag=True,
+            is_assessable=True,
+            uncertainty_reason="",
             condition_level=ConditionLevel.CAUTION,
             damage_type="모서리 마모",
             damage_description="하단 모서리에 마모가 보입니다.",
@@ -56,6 +59,7 @@ class DiagnosisServiceTests(SimpleTestCase):
         self.assertTrue(result["result"]["is_reference_only"])
         request = client.responses.parse.call_args.kwargs
         self.assertEqual(request["model"], "gpt-4.1-mini")
+        self.assertFalse(request["store"])
         image_input = request["input"][0]["content"][1]
         self.assertTrue(image_input["image_url"].startswith("data:image/jpeg;base64,"))
 
@@ -66,6 +70,9 @@ class DiagnosisServiceTests(SimpleTestCase):
 
     def test_safe_result_removes_damage_markers(self):
         parsed = DamageAnalysis(
+            is_bag=True,
+            is_assessable=True,
+            uncertainty_reason="",
             condition_level=ConditionLevel.SAFE,
             damage_type="",
             damage_description="뚜렷한 손상이 보이지 않습니다.",

@@ -1,3 +1,5 @@
+import uuid
+
 from django.conf import settings
 from django.db import models
 
@@ -26,6 +28,12 @@ class Diagnosis(models.Model):
         on_delete=models.CASCADE,
     )
     image = models.ImageField(upload_to="diagnoses/")
+    checklist = models.JSONField(default=dict, blank=True)
+    analysis_revision = models.UUIDField(default=uuid.uuid4, editable=False)
+    lease_token = models.UUIDField(null=True, editable=False)
+    lease_expires_at = models.DateTimeField(null=True, editable=False)
+    analysis_attempts = models.PositiveSmallIntegerField(default=0, editable=False)
+    completed_at = models.DateTimeField(null=True, editable=False)
     status = models.CharField(
         max_length=10,
         choices=Status.choices,

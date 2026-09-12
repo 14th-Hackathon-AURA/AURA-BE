@@ -1,9 +1,8 @@
+from datetime import time
 from urllib.parse import quote
 
 from django.utils import timezone
 from rest_framework import serializers
-
-from .business_hours import UnknownBusinessHours, local_visit_datetime, reservation_slots
 
 from .models import (
     CareGuide,
@@ -15,9 +14,15 @@ from .models import (
 
 
 class DiagnosisSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source="product.name", read_only=True)
+    condition_label = serializers.SerializerMethodField()
+
+    def get_condition_label(self, obj):
+        return obj.get_condition_level_display() if obj.condition_level else "판독 보류"
+
     class Meta:
         model = Diagnosis
-        fields = "__all__"
+        exclude = ("analysis_revision", "lease_token", "lease_expires_at", "analysis_attempts")
         read_only_fields = (
             "requested_by",
             "status",
@@ -28,7 +33,20 @@ class DiagnosisSerializer(serializers.ModelSerializer):
             "care_suggestion",
             "damage_location",
             "created_at",
+            "completed_at",
         )
+
+    def validate_image(self, image):
+        from .image_utils import normalize_upload
+        return normalize_upload(image)
+
+    def validate_checklist(self, value):
+        allowed = {"whole_bag_visible", "well_lit", "unobstructed"}
+        if not isinstance(value, dict) or set(value) - allowed:
+            raise serializers.ValidationError("촬영 체크리스트 형식이 올바르지 않습니다.")
+        if any(type(item) is not bool for item in value.values()):
+            raise serializers.ValidationError("체크리스트 값은 true/false여야 합니다.")
+        return value
 
     def validate_product(self, product):
         if product.user != self.context["request"].user:
@@ -191,17 +209,17 @@ class VisitReservationSerializer(serializers.ModelSerializer):
                     )
                 })
 
-        local_visit_at = local_visit_datetime(visit_at)
-        try:
-            slots = reservation_slots(store.opening_hours, local_visit_at.date())
-        except UnknownBusinessHours as exc:
-            raise serializers.ValidationError({"visit_at": str(exc)}) from exc
+        local_visit_at = timezone.localtime(visit_at)
+        visit_time = local_visit_at.time().replace(tzinfo=None)
 
-        if local_visit_at not in slots:
+        opening_time = time(10, 0)
+        closing_time = time(18, 0)
+
+        if not opening_time <= visit_time < closing_time:
             raise serializers.ValidationError({
                 "visit_at": (
-                    "매장 휴무일 또는 영업시간 밖입니다. "
-                    "예약 가능 시간을 다시 선택해 주세요."
+                    "예약 가능 시간은 오전 10시부터 "
+                    "오후 6시까지입니다."
                 )
             })
 
