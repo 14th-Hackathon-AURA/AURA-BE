@@ -1,8 +1,9 @@
-from datetime import time
 from urllib.parse import quote
 
 from django.utils import timezone
 from rest_framework import serializers
+
+from .business_hours import UnknownBusinessHours, local_visit_datetime, reservation_slots
 
 from .models import (
     CareGuide,
@@ -190,17 +191,17 @@ class VisitReservationSerializer(serializers.ModelSerializer):
                     )
                 })
 
-        local_visit_at = timezone.localtime(visit_at)
-        visit_time = local_visit_at.time().replace(tzinfo=None)
+        local_visit_at = local_visit_datetime(visit_at)
+        try:
+            slots = reservation_slots(store.opening_hours, local_visit_at.date())
+        except UnknownBusinessHours as exc:
+            raise serializers.ValidationError({"visit_at": str(exc)}) from exc
 
-        opening_time = time(10, 0)
-        closing_time = time(18, 0)
-
-        if not opening_time <= visit_time < closing_time:
+        if local_visit_at not in slots:
             raise serializers.ValidationError({
                 "visit_at": (
-                    "예약 가능 시간은 오전 10시부터 "
-                    "오후 6시까지입니다."
+                    "매장 휴무일 또는 영업시간 밖입니다. "
+                    "예약 가능 시간을 다시 선택해 주세요."
                 )
             })
 

@@ -10,6 +10,8 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
+from .business_hours import STORE_TIMEZONE, UnknownBusinessHours, reservation_slots
+
 from .diagnosis_services import (
     DiagnosisProviderError,
     analyze_diagnosis_image,
@@ -431,31 +433,31 @@ class VisitReservationViewSet(viewsets.ModelViewSet):
                 "date": "날짜는 YYYY-MM-DD 형식이어야 합니다."
             }) from exc
 
-        if selected_date < timezone.localdate():
+        if selected_date < timezone.localdate(timezone=STORE_TIMEZONE):
             raise ValidationError({
                 "date": "지난 날짜는 조회할 수 없습니다."
             })
 
-        opening_datetime = timezone.make_aware(
-            datetime.combine(selected_date, time(10, 0))
-        )
-        closing_datetime = timezone.make_aware(
-            datetime.combine(selected_date, time(18, 0))
-        )
+        try:
+            candidate_slots = reservation_slots(store.opening_hours, selected_date)
+        except UnknownBusinessHours as exc:
+            raise ValidationError({"store": str(exc)}) from exc
+
+        day_start = datetime.combine(selected_date, time.min, tzinfo=STORE_TIMEZONE)
 
         reserved_visit_times = set(
             VisitReservation.objects.filter(
                 store=store,
-                visit_at__date=selected_date,
+                visit_at__gte=day_start,
+                visit_at__lt=day_start + timedelta(days=1),
                 status=VisitReservation.Status.RESERVED,
             ).values_list("visit_at", flat=True)
         )
 
         slots = []
-        current_datetime = opening_datetime
-
-        while current_datetime < closing_datetime:
-            if current_datetime > timezone.now():
+        now = timezone.now()
+        for current_datetime in candidate_slots:
+            if current_datetime > now:
                 slots.append({
                     "visit_at": current_datetime.isoformat(),
                     "time": current_datetime.strftime("%H:%M"),
@@ -464,8 +466,6 @@ class VisitReservationViewSet(viewsets.ModelViewSet):
                         not in reserved_visit_times
                     ),
                 })
-
-            current_datetime += timedelta(minutes=30)
 
         return Response({
             "store":StoreSerializer(
