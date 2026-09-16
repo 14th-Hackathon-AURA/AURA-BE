@@ -4,6 +4,7 @@ from django.contrib import admin
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
+from config.views import health_check
 from apps.accounts.views import EmailTokenView, NotificationViewSet, RegisterView, ProfileView
 from apps.catalog.views import CareBookmarkViewSet, ProductImageViewSet, ProductViewSet
 from apps.care.views import CareGuideViewSet, DiagnosisViewSet, ServiceRequestViewSet, StoreViewSet, VisitReservationViewSet
@@ -32,6 +33,7 @@ router.register("notifications", NotificationViewSet, basename="notification")
 router.register("ai/chat-sessions", ChatSessionViewSet, basename="chat-session")
 router.register("ai/visit-cards", VisitCardViewSet, basename="ai-visit-card")
 urlpatterns = [
+    path("health/", health_check, name="health-check"),
     path("admin/", admin.site.urls),
     path("api/auth/register/", RegisterView.as_view()),
     path("api/auth/token/", EmailTokenView.as_view()), path("api/auth/token/refresh/", TokenRefreshView.as_view()),

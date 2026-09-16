@@ -57,7 +57,7 @@ AURA 최종 와이어프레임과 확정된 팀 결정을 기준으로 한 Djang
 - 제공받은 MCM 상품 94개의 상품명·카테고리·소재·사이즈·색상·가격·이미지·스타일·사용 상황을 검색 근거로 사용합니다.
 - 사용자 문장과 온보딩의 예산·관심 카테고리·활동 상황을 반영해 최대 3개의 후보를 조회한 뒤 OpenAI Responses API에 전달합니다.
 - 모델이 만든 상품 식별자를 신뢰하지 않고 서버가 조회한 상품만 `recommended_products`로 반환합니다.
-- 상담 후 “카드로 저장해줘”라고 요청하면 직전 추천 상품을 AI 방문 카드로 저장합니다.
+- 상담 후 “카드로 저장해줘”라고 요청하면 직전 추천 상품을 AI 방문 카드로 저장하고, 사용자가 말한 니즈와 선택 상품이 맞는 이유를 2~4문장·300자 이내의 개인화된 문구로 요약합니다. 요약 생성에 실패하면 `상담 요약을 생성하지 못했습니다. 잠시 후 카드를 다시 저장해 주세요.`를 표시합니다.
 - 실제 AI 답변을 사용하려면 `.env`의 `OPENAI_API_KEY`가 필요합니다.
 
 ## AI 손상 진단
@@ -120,24 +120,45 @@ Authorization: Bearer {access_token}
 
 AS를 지원하는 `supports_as=true` 매장만 반환합니다.
 
+매장명·주소·지역·매장 유형은 `q`로 검색할 수 있습니다. 현재 위치의
+위도와 경도를 함께 전달하면 가까운 매장부터 정렬되며, `limit`으로 반환
+개수를 제한할 수 있습니다.
+
+```http
+GET /api/stores/?q=서울&latitude=37.5172&longitude=127.0473&limit=2
+Authorization: Bearer {access_token}
+```
+
+- `latitude`와 `longitude`는 반드시 함께 전달합니다.
+- `limit`은 1부터 100까지 사용할 수 있습니다.
+- 좌표가 없는 매장은 거리순 목록의 마지막에 표시됩니다.
+
 응답 예시:
 
 ```json
-[
-  {
-    "id": 1,
-    "name": "청담 공식 AS 센터",
-    "address": "서울특별시 강남구 압구정로 123",
-    "phone": "02-1234-5678",
-    "latitude": "37.525000",
-    "longitude": "127.040000",
-    "opening_hours": "월-토 10:00-18:00",
-    "supports_as": true
-  }
-]
+{
+  "count": 1,
+  "search": "서울",
+  "location_used": true,
+  "stores": [
+    {
+      "id": 1,
+      "name": "청담 공식 AS 센터",
+      "address": "서울특별시 강남구 압구정로 123",
+      "phone": "02-1234-5678",
+      "latitude": "37.5250000",
+      "longitude": "127.0400000",
+      "opening_hours": "월-토 10:00-18:00",
+      "supports_as": true,
+      "distance_km": 1.8,
+      "map_search_url": "https://map.naver.com/p/search/..."
+    }
+  ]
+}
 ```
 
-매장 API는 조회 전용입니다. 테스트용 매장 데이터는 Django 관리자 페이지 또는 Django shell에서 등록해야 합니다.
+매장 API는 조회 전용입니다. MCM 매장 CSV는 `import_mcm_stores` 관리 명령으로
+등록하며, 좌표 생성이 필요하면 `--geocode`와 Kakao REST API 키를 사용합니다.
 
 ## 예약 가능 시간 조회
 

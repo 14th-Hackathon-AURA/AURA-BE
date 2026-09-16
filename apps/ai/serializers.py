@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from .catalog import get_product
 from .models import ChatMessage, ChatSession, VisitCard
+from .services import generate_visit_card_summary
 
 
 class ChatRequestSerializer(serializers.Serializer):
@@ -58,6 +59,7 @@ class VisitCardSerializer(serializers.ModelSerializer):
         read_only_fields = (
             "id",
             "product",
+            "consultation_summary",
             "created_at",
             "updated_at",
         )
@@ -87,8 +89,14 @@ class VisitCardSerializer(serializers.ModelSerializer):
             defaults={
                 "session_id": session_id,
                 "product": product,
-                "consultation_summary": validated_data.get(
-                    "consultation_summary", ""
+                "consultation_summary": generate_visit_card_summary(
+                    session=(
+                        ChatSession.objects.filter(id=session_id).first()
+                        if session_id
+                        else None
+                    ),
+                    user=request.user,
+                    product=product,
                 ),
             },
         )
