@@ -154,3 +154,13 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
 }
+
+# sync is convenient for local demos; database mode returns PENDING immediately.
+DIAGNOSIS_EXECUTION = os.getenv("DIAGNOSIS_EXECUTION", "sync")
+if DIAGNOSIS_EXECUTION not in {"sync", "database"}:
+    raise ValueError("DIAGNOSIS_EXECUTION must be sync or database")
+DIAGNOSIS_LEASE_SECONDS = int(os.getenv("DIAGNOSIS_LEASE_SECONDS", "180"))
+DIAGNOSIS_MAX_ATTEMPTS = int(os.getenv("DIAGNOSIS_MAX_ATTEMPTS", "3"))
+if DIAGNOSIS_LEASE_SECONDS < 60 or not 1 <= DIAGNOSIS_MAX_ATTEMPTS <= 20:
+    raise ValueError("Diagnosis lease must be >=60 seconds and max attempts in 1..20")
+REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = {"diagnosis": "20/hour"}

@@ -1,16 +1,17 @@
 import math
 import secrets
+import uuid
 from datetime import datetime, time, timedelta
 
 from django.db import IntegrityError, transaction
+from django.conf import settings
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
-
-from .business_hours import STORE_TIMEZONE, UnknownBusinessHours, reservation_slots
+from rest_framework.throttling import UserRateThrottle
 
 from .diagnosis_services import (
     DiagnosisProviderError,
@@ -68,22 +69,37 @@ def calculate_distance_km(
     return earth_radius_km * central_angle
 
 
+class DiagnosisThrottle(UserRateThrottle):
+    scope = "diagnosis"
+
+
 class DiagnosisViewSet(viewsets.ModelViewSet):
     serializer_class = DiagnosisSerializer
+
+    def get_throttles(self):
+        return [DiagnosisThrottle()] if self.action in {"create", "update", "partial_update", "retry"} else []
 
     def get_queryset(self):
         queryset = Diagnosis.objects.filter(
             requested_by=self.request.user
-        ).order_by("-created_at")
+        ).select_related("product").order_by("-created_at", "-pk")
 
         product_id = self.request.query_params.get("product")
         year = self.request.query_params.get("year")
 
         if product_id:
+            try:
+                product_id = int(product_id)
+                if not 1 <= product_id <= 9223372036854775807:
+                    raise ValueError
+            except (TypeError, ValueError):
+                raise ValidationError({"product": "올바른 제품 ID를 입력해 주세요."})
             queryset = queryset.filter(product_id=product_id)
 
         if year:
             try:
+                if not 1 <= int(year) <= 9999:
+                    raise ValueError
                 queryset = queryset.filter(
                     created_at__year=int(year)
                 )
@@ -107,6 +123,7 @@ class DiagnosisViewSet(viewsets.ModelViewSet):
         product = validated_data.get("product")
         should_reanalyze = (
             "image" in validated_data
+            or "checklist" in validated_data
             or (
                 product is not None
                 and product.pk != current.product_id
@@ -125,60 +142,43 @@ class DiagnosisViewSet(viewsets.ModelViewSet):
             damage_description="",
             care_suggestion="",
             damage_location={},
+            analysis_revision=uuid.uuid4(),
+            analysis_attempts=0,
+            lease_token=None,
+            lease_expires_at=None,
+            completed_at=None,
         )
         self._analyze(diagnosis)
 
     @staticmethod
     def _analyze(diagnosis):
-        try:
-            analysis = analyze_diagnosis_image(diagnosis)
-
-        except DiagnosisProviderError:
-            diagnosis.status = Diagnosis.Status.FAILED
-            diagnosis.result = {
-                "analysis_method": "ZERO_SHOT_MULTIMODAL",
-                "error": (
-                    "이미지 분석에 실패했습니다. "
-                    "다시 촬영하거나 잠시 후 재시도해 주세요."
-                ),
-            }
-            diagnosis.save(
-                update_fields=(
-                    "status",
-                    "result",
-                )
-            )
+        if settings.DIAGNOSIS_EXECUTION == "database":
             return
+        from .diagnosis_jobs import run_diagnosis
+        run_diagnosis(diagnosis, analyzer=analyze_diagnosis_image)
+        diagnosis.refresh_from_db()
 
-        diagnosis.status = Diagnosis.Status.DONE
-        diagnosis.condition_level = analysis[
-            "condition_level"
-        ]
-        diagnosis.damage_type = analysis[
-            "damage_type"
-        ]
-        diagnosis.damage_description = analysis[
-            "damage_description"
-        ]
-        diagnosis.care_suggestion = analysis[
-            "care_suggestion"
-        ]
-        diagnosis.damage_location = analysis[
-            "damage_location"
-        ]
-        diagnosis.result = analysis["result"]
-
-        diagnosis.save(
-            update_fields=(
-                "status",
-                "condition_level",
-                "damage_type",
-                "damage_description",
-                "care_suggestion",
-                "damage_location",
-                "result",
-            )
+    @action(detail=True, methods=["post"])
+    def retry(self, request, pk=None):
+        diagnosis = self.get_object()
+        updated = Diagnosis.objects.filter(pk=diagnosis.pk, status=Diagnosis.Status.FAILED).update(
+            status=Diagnosis.Status.PENDING, result={}, condition_level="", damage_type="",
+            damage_description="", care_suggestion="", damage_location={},
+            analysis_revision=uuid.uuid4(), analysis_attempts=0,
+            lease_token=None, lease_expires_at=None, completed_at=None,
         )
+        if not updated:
+            raise ValidationError({"status": "실패한 진단만 재시도할 수 있습니다."})
+        diagnosis.refresh_from_db()
+        self._analyze(diagnosis)
+        return Response(self.get_serializer(diagnosis).data)
+
+    @action(detail=False, methods=["get"], url_path="filter-options")
+    def filter_options(self, request):
+        owned = Diagnosis.objects.filter(requested_by=request.user)
+        products = list(owned.order_by("product__name").values("product_id", "product__name").distinct())
+        years = [item.year for item in owned.dates("created_at", "year", order="DESC")]
+        return Response({"products": products, "years": years})
 
 class CareGuideViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CareGuideSerializer
@@ -433,31 +433,31 @@ class VisitReservationViewSet(viewsets.ModelViewSet):
                 "date": "날짜는 YYYY-MM-DD 형식이어야 합니다."
             }) from exc
 
-        if selected_date < timezone.localdate(timezone=STORE_TIMEZONE):
+        if selected_date < timezone.localdate():
             raise ValidationError({
                 "date": "지난 날짜는 조회할 수 없습니다."
             })
 
-        try:
-            candidate_slots = reservation_slots(store.opening_hours, selected_date)
-        except UnknownBusinessHours as exc:
-            raise ValidationError({"store": str(exc)}) from exc
-
-        day_start = datetime.combine(selected_date, time.min, tzinfo=STORE_TIMEZONE)
+        opening_datetime = timezone.make_aware(
+            datetime.combine(selected_date, time(10, 0))
+        )
+        closing_datetime = timezone.make_aware(
+            datetime.combine(selected_date, time(18, 0))
+        )
 
         reserved_visit_times = set(
             VisitReservation.objects.filter(
                 store=store,
-                visit_at__gte=day_start,
-                visit_at__lt=day_start + timedelta(days=1),
+                visit_at__date=selected_date,
                 status=VisitReservation.Status.RESERVED,
             ).values_list("visit_at", flat=True)
         )
 
         slots = []
-        now = timezone.now()
-        for current_datetime in candidate_slots:
-            if current_datetime > now:
+        current_datetime = opening_datetime
+
+        while current_datetime < closing_datetime:
+            if current_datetime > timezone.now():
                 slots.append({
                     "visit_at": current_datetime.isoformat(),
                     "time": current_datetime.strftime("%H:%M"),
@@ -466,6 +466,8 @@ class VisitReservationViewSet(viewsets.ModelViewSet):
                         not in reserved_visit_times
                     ),
                 })
+
+            current_datetime += timedelta(minutes=30)
 
         return Response({
             "store":StoreSerializer(
