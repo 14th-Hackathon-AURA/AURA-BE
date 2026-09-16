@@ -10,3 +10,6 @@ openai>=2.53,<3
 pydantic>=2.8,<3
 python-dotenv>=1.0
 azure-ai-documentintelligence>=1.0
+# The bundled checkpoint records Ultralytics 8.4.150 in its metadata.
+# Install CPU PyTorch first with deploy/aws/install_dependencies.sh.
+ultralytics==8.4.150

@@ -1,0 +1,21 @@
+[Unit]
+Description=AURA durable AI diagnosis worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aura
+Group=aura
+WorkingDirectory=/srv/aura
+EnvironmentFile=/etc/aura/aura.env
+ExecStart=/srv/aura/.venv/bin/python manage.py run_diagnosis_worker
+Restart=always
+RestartSec=5
+TimeoutStopSec=310
+Nice=5
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

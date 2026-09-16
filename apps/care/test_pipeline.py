@@ -2,12 +2,13 @@ from datetime import timedelta
 from io import BytesIO
 import os
 from pathlib import Path
-import tempfile
+import shutil
 import uuid
 from unittest.mock import patch
 
 from PIL import Image
 from django.contrib.auth.models import User
+from django.conf import settings
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, override_settings
@@ -17,7 +18,12 @@ from rest_framework.test import APITestCase
 
 from apps.catalog.models import Product
 from .diagnosis_jobs import run_diagnosis
-from .diagnosis_services import DiagnosisProviderError, review_result
+from .diagnosis_schema import DIAGNOSIS_CLASS_CODES
+from .diagnosis_services import (
+    DiagnosisProviderError,
+    _analyze_hybrid,
+    review_result,
+)
 from .image_utils import normalize_upload
 from .models import Diagnosis
 from .yolo_diagnosis import build_result, analyze_yolo, CLASS_NAMES
@@ -77,24 +83,113 @@ class DetectorTests(SimpleTestCase):
                 build_result([row], "version")
 
     def test_schema_matches_training(self):
-        from ml.schema import CLASS_NAMES as training_names
-        self.assertEqual(CLASS_NAMES, training_names)
+        self.assertEqual(CLASS_NAMES, list(DIAGNOSIS_CLASS_CODES))
 
     def test_missing_weights_no_fallback(self):
-        with tempfile.TemporaryDirectory() as folder:
-            with patch.dict(os.environ, {"AURA_YOLO_WEIGHTS": str(Path(folder) / "missing.pt")}):
-                with self.assertRaises(DiagnosisProviderError) as error:
-                    analyze_yolo(None)
-                self.assertEqual(error.exception.code, "MODEL_NOT_READY")
+        missing = Path(settings.BASE_DIR) / "missing-yolo-model.pt"
+        with patch.dict(os.environ, {"AURA_YOLO_WEIGHTS": str(missing)}):
+            with self.assertRaises(DiagnosisProviderError) as error:
+                analyze_yolo(None)
+            self.assertEqual(error.exception.code, "MODEL_NOT_READY")
+
+
+class HybridPolicyTests(SimpleTestCase):
+    @staticmethod
+    def cv_result(class_id=3):
+        return build_result(
+            [(class_id, 0.9, [0.1, 0.2, 0.5, 0.6])],
+            "cv-version",
+        )
+
+    @staticmethod
+    def ai_result(damage_code="stain", description="AI result"):
+        return {
+            "condition_level": "CAUTION",
+            "damage_type": "표면 얼룩",
+            "damage_description": description,
+            "care_suggestion": "공식 점검을 권장합니다.",
+            "damage_location": {
+                "points": [
+                    {
+                        "label": "중앙",
+                        "x_percent": 30,
+                        "y_percent": 40,
+                    }
+                ],
+                "boxes": [],
+            },
+            "result": {
+                "analysis_method": "ZERO_SHOT_MULTIMODAL",
+                "damage_count": 1,
+                "findings": [
+                    {
+                        "damage_code": damage_code,
+                        "label": "중앙",
+                        "x_percent": 30,
+                        "y_percent": 40,
+                    }
+                ],
+                "requires_review": False,
+                "is_reference_only": True,
+            },
+        }
+
+    @patch("apps.care.diagnosis_services._analyze_openai")
+    @patch("apps.care.yolo_diagnosis.analyze_yolo")
+    def test_agreement_finishes_without_retry(self, yolo_mock, ai_mock):
+        yolo_mock.return_value = self.cv_result()
+        ai_mock.return_value = self.ai_result()
+
+        result = _analyze_hybrid(object())
+
+        self.assertEqual(yolo_mock.call_count, 1)
+        self.assertEqual(ai_mock.call_count, 1)
+        self.assertEqual(result["result"]["selected_source"], "cv")
+        self.assertEqual(result["result"]["comparison_attempts"], 1)
+
+    @patch("apps.care.diagnosis_services._analyze_openai")
+    @patch("apps.care.yolo_diagnosis.analyze_yolo")
+    def test_mismatch_retries_both_then_uses_ai(self, yolo_mock, ai_mock):
+        yolo_mock.side_effect = [self.cv_result(0), self.cv_result(0)]
+        ai_mock.side_effect = [
+            self.ai_result("stain", "first AI"),
+            self.ai_result("stain", "second AI"),
+        ]
+
+        result = _analyze_hybrid(object())
+
+        self.assertEqual(yolo_mock.call_count, 2)
+        self.assertEqual(ai_mock.call_count, 2)
+        self.assertEqual(result["damage_description"], "second AI")
+        self.assertEqual(result["result"]["selected_source"], "ai")
+        self.assertEqual(result["result"]["comparison_attempts"], 2)
+        self.assertFalse(result["result"]["agreement"])
+
+    @patch("apps.care.diagnosis_services._analyze_openai")
+    @patch("apps.care.yolo_diagnosis.analyze_yolo")
+    def test_mismatch_then_agreement_uses_second_cv(self, yolo_mock, ai_mock):
+        yolo_mock.side_effect = [self.cv_result(0), self.cv_result(3)]
+        ai_mock.side_effect = [self.ai_result(), self.ai_result()]
+
+        result = _analyze_hybrid(object())
+
+        self.assertEqual(result["result"]["selected_source"], "cv")
+        self.assertTrue(result["result"]["agreement"])
+        self.assertEqual(result["result"]["comparison_attempts"], 2)
 
 
 @override_settings(DIAGNOSIS_EXECUTION="database")
 class AsyncDiagnosisTests(APITestCase):
     def setUp(self):
-        self.folder = tempfile.TemporaryDirectory()
-        self.media = override_settings(MEDIA_ROOT=self.folder.name)
+        self.folder = (
+            Path(settings.BASE_DIR)
+            / ".test-media"
+            / str(uuid.uuid4())
+        )
+        self.folder.mkdir(parents=True)
+        self.media = override_settings(MEDIA_ROOT=self.folder)
         self.media.enable()
-        self.addCleanup(self.folder.cleanup)
+        self.addCleanup(shutil.rmtree, self.folder, True)
         self.addCleanup(self.media.disable)
         cache.clear()
         self.user = User.objects.create_user("pipeline-owner")
