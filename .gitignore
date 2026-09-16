@@ -67,6 +67,9 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
+.test-media/
+.test-tmp/
+.test-direct/
 cover/
 
 # Translations
@@ -135,6 +138,7 @@ celerybeat.pid
 # Environments
 .env
 .venv
+.venv-cpu/
 env/
 venv/
 ENV/

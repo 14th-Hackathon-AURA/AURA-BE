@@ -108,10 +108,12 @@ GET /api/care-guides/?guide_type=POST_PURCHASE&material=가죽&category=bag&seas
 
 - `POST/GET /api/diagnoses/`
 - `GET/PATCH/DELETE /api/diagnoses/{id}/`
+- `POST /api/diagnoses/{id}/retry/`
+- `GET /api/diagnoses/filter-options/`
 
 생성은 `multipart/form-data`로 `product`, `image`를 전송합니다. 본인 상품의 진단만 생성하고 본인 기록만 조회·수정·삭제할 수 있습니다.
 
-생성 직후 상태를 `PENDING`으로 저장한 뒤 OpenAI 멀티모달 비전 모델로 이미지를 분석합니다. 성공하면 `DONE`, 실패하면 `FAILED`로 자동 변경됩니다. 사진 또는 연결 상품을 수정하면 기존 결과를 초기화하고 다시 분석합니다.
+생성 직후 상태를 `PENDING`으로 저장하고 별도 진단 워커가 YOLO 탐지 모델과 OpenAI 멀티모달 비전 모델을 함께 실행합니다. 두 결과가 다르면 두 모델을 한 번 더 실행하고, 두 번째 결과도 다르면 AI 결과를 사용합니다. 성공하면 `DONE`, 실패하면 `FAILED`로 자동 변경됩니다. 클라이언트는 상세 조회를 반복해 완료 상태를 확인합니다. 사진·촬영 체크리스트·연결 상품을 수정하면 기존 결과를 초기화하고 다시 분석합니다.
 
 필터:
 
@@ -127,7 +129,9 @@ GET /api/diagnoses/?product=3&year=2026
 - `damage_type`, `damage_description`
 - `care_suggestion`
 - `damage_location.points`: 이미지 위에 표시할 최대 2개의 `label`, `x_percent`, `y_percent`
+- `damage_location.boxes`: YOLO가 탐지한 영역과 신뢰도
 - `result.damage_count`
+- `result.selected_source`, `result.agreement`, `result.comparison_attempts`
 - `result.analysis_method`: `ZERO_SHOT_MULTIMODAL`
 - `result.is_reference_only`, `result.notice`
 

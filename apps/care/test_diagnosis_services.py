@@ -7,8 +7,9 @@ from django.test import SimpleTestCase
 
 from .diagnosis_services import (
     ConditionLevel,
+    DamageCode,
     DamageAnalysis,
-    DamagePoint,
+    DamageFinding,
     DiagnosisProviderError,
     analyze_diagnosis_image,
 )
@@ -31,6 +32,7 @@ class DiagnosisServiceTests(SimpleTestCase):
         {
             "OPENAI_API_KEY": "test-key",
             "OPENAI_VISION_MODEL": "gpt-4.1-mini",
+            "DIAGNOSIS_PROVIDER": "openai",
         },
         clear=False,
     )
@@ -44,8 +46,13 @@ class DiagnosisServiceTests(SimpleTestCase):
             damage_type="모서리 마모",
             damage_description="하단 모서리에 마모가 보입니다.",
             care_suggestion="마른 천으로 닦고 공식 점검을 고려해 주세요.",
-            damage_locations=[
-                DamagePoint(label="하단 모서리", x_percent=82, y_percent=91)
+            findings=[
+                DamageFinding(
+                    damage_code=DamageCode.STAIN,
+                    label="하단 모서리",
+                    x_percent=82,
+                    y_percent=91,
+                )
             ],
         )
         client = Mock()
@@ -63,12 +70,22 @@ class DiagnosisServiceTests(SimpleTestCase):
         image_input = request["input"][0]["content"][1]
         self.assertTrue(image_input["image_url"].startswith("data:image/jpeg;base64,"))
 
-    @patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False)
+    @patch.dict(
+        os.environ,
+        {"OPENAI_API_KEY": "", "DIAGNOSIS_PROVIDER": "openai"},
+        clear=False,
+    )
     def test_missing_api_key_is_provider_error(self):
         with self.assertRaises(DiagnosisProviderError):
             analyze_diagnosis_image(self.diagnosis())
 
-    def test_safe_result_removes_damage_markers(self):
+    @patch.dict(
+        os.environ,
+        {"OPENAI_API_KEY": "test-key", "DIAGNOSIS_PROVIDER": "openai"},
+        clear=False,
+    )
+    @patch("apps.care.diagnosis_services.OpenAI")
+    def test_safe_result_with_findings_requires_review(self, openai_mock):
         parsed = DamageAnalysis(
             is_bag=True,
             is_assessable=True,
@@ -77,9 +94,22 @@ class DiagnosisServiceTests(SimpleTestCase):
             damage_type="",
             damage_description="뚜렷한 손상이 보이지 않습니다.",
             care_suggestion="통풍이 잘되는 곳에 보관해 주세요.",
-            damage_locations=[
-                DamagePoint(label="사용 흔적", x_percent=40, y_percent=40)
+            findings=[
+                DamageFinding(
+                    damage_code=DamageCode.UNCERTAIN,
+                    label="사용 흔적",
+                    x_percent=40,
+                    y_percent=40,
+                )
             ],
         )
+        client = Mock()
+        client.responses.parse.return_value = SimpleNamespace(
+            output_parsed=parsed
+        )
+        openai_mock.return_value = client
 
-        self.assertEqual(parsed.damage_locations, [])
+        result = analyze_diagnosis_image(self.diagnosis())
+
+        self.assertTrue(result["result"]["requires_review"])
+        self.assertEqual(result["condition_level"], "")

@@ -10,9 +10,10 @@ from pathlib import Path
 from threading import Lock
 
 from PIL import Image
+from .diagnosis_schema import DIAGNOSIS_CLASS_CODES
 from .diagnosis_services import DiagnosisProviderError, review_result
 
-CLASS_NAMES = ["deformation", "zipper_fabric_tear", "handle_damage", "stain", "leather_crack"]
+CLASS_NAMES = list(DIAGNOSIS_CLASS_CODES)
 LABELS = ["형태변형", "지퍼·원단 찢어짐", "손잡이 마모·뜯김", "표면 얼룩·오염", "가죽 갈라짐"]
 _LOCK = Lock()
 

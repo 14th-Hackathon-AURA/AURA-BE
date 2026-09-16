@@ -7,6 +7,8 @@ from enum import Enum
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
+from .diagnosis_schema import DIAGNOSIS_CLASS_CODES
+
 DIAGNOSIS_SYSTEM_PROMPT = """
 당신은 AURA 가방 외관 분석 도우미입니다.
 사진에서 실제로 보이는 정보만 근거로 한국어로 답하세요.
@@ -70,13 +72,7 @@ class DamageCode(str, Enum):
     UNCERTAIN = "uncertain"
 
 
-CLASS_CODES = (
-    "deformation",
-    "zipper_fabric_tear",
-    "handle_damage",
-    "stain",
-    "leather_crack",
-)
+CLASS_CODES = DIAGNOSIS_CLASS_CODES
 
 
 class DamageFinding(BaseModel):
@@ -363,6 +359,8 @@ def _analyze_hybrid(diagnosis):
         errors["ai"] = exc.code
 
     agreement = None
+    comparison_attempts = 1
+    initial_selection_reason = None
 
     if ai_result is None:
         final = review_result(
@@ -385,6 +383,42 @@ def _analyze_hybrid(diagnosis):
 
     else:
         agreement, reason = _results_agree(cv_result, ai_result)
+        initial_selection_reason = reason
+
+        # 두 모델이 다르면 두 모델 모두 한 번 더 실행해 일시적인
+        # 추론 편차인지 확인합니다. 그래도 다르면 아래 정책대로
+        # 두 번째 AI 결과를 최종 결과로 사용합니다.
+        if not agreement:
+            comparison_attempts = 2
+            retry_cv_result = None
+            retry_ai_result = None
+
+            try:
+                retry_cv_result = analyze_yolo(diagnosis)
+            except DiagnosisProviderError as exc:
+                errors["cv_retry"] = exc.code
+
+            try:
+                retry_ai_result = _analyze_openai(diagnosis)
+            except DiagnosisProviderError as exc:
+                errors["ai_retry"] = exc.code
+
+            if retry_cv_result is not None:
+                cv_result = retry_cv_result
+            if retry_ai_result is not None:
+                ai_result = retry_ai_result
+
+            if retry_cv_result is None or retry_ai_result is None:
+                agreement = False
+                reason = "RETRY_PROVIDER_FAILED"
+            elif retry_ai_result["result"].get("requires_review"):
+                agreement = False
+                reason = "RETRY_AI_UNASSESSABLE"
+            else:
+                agreement, reason = _results_agree(
+                    retry_cv_result,
+                    retry_ai_result,
+                )
 
         if reason == "BOTH_NO_DETECTION":
             final = review_result(
@@ -404,16 +438,6 @@ def _analyze_hybrid(diagnosis):
             final["result"]["requires_review"] = True
             source = "ai"
 
-            # YOLO가 손상을 찾았는데 AI가 SAFE라고 한 충돌을
-            # 정상 확정으로 표시하지 않습니다.
-            if final["condition_level"] == "SAFE":
-                final["condition_level"] = ""
-                final["damage_type"] = "모델 간 판단 불일치"
-                final["damage_description"] = (
-                    "AI는 뚜렷한 하자를 확인하지 못했지만 "
-                    "YOLO는 손상을 검출했습니다. 추가 확인이 필요합니다."
-                )
-
     metadata = final["result"]
     metadata["selected_analysis_method"] = metadata.get(
         "analysis_method"
@@ -424,6 +448,8 @@ def _analyze_hybrid(diagnosis):
             "selected_source": source,
             "agreement": agreement,
             "selection_reason": reason,
+            "initial_selection_reason": initial_selection_reason,
+            "comparison_attempts": comparison_attempts,
             "comparison_policy": "type-count-point-in-box-v1",
             "cv_result": cv_result,
             "ai_result": ai_result,
